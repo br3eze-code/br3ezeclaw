@@ -1,4 +1,5 @@
 const WebSocket = require('ws');
+const crypto = require('crypto');
 const { logger } = require('./logger');
 const { getConfig } = require('./config');
 const { getMikroTikClient } = require('./mikrotik');
@@ -23,7 +24,16 @@ class WebSocketGateway {
         const url = new URL(info.req.url, `http://${info.req.headers.host}`);
         const token = url.searchParams.get('token') || info.req.headers['x-agentos-token'];
         const config = getConfig();
-
+if (!token) return false;
+         const expected = getConfig().gateway.token;
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(token),
+      Buffer.from(expected)
+    );
+  } catch {
+    return false;
+  }
         if (token !== config.gateway.token) {
             logger.warn('WebSocket auth failed');
             return false;
