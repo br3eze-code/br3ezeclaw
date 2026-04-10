@@ -5,6 +5,8 @@
 
 [![Version](https://img.shields.io/badge/version-2026.5.2-blue)](...)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Tests](https://github.com/br3eze-code/br3ezeclaw/workflows/Tests/badge.svg)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## ✨ Features
 
@@ -31,12 +33,14 @@ cp .env.example .env
 npm run dev        # Daemon mode
 npm run cli        # Interactive CLI
 ```
-📖 Documentation
-Installation Guide
-API Reference
-Telegram Bot Setup
-WhatsApp Integration
-🛠️ Tech Stack
+## 📖 Documentation
+
+-Installation Guide
+-API Reference
+-Telegram Bot Setup
+-WhatsApp Integration
+
+## 🛠️ Tech Stack
 | Component  | Technology                            |
 | ---------- | ------------------------------------- |
 | Router API | MikroTik RouterOS API                 |
