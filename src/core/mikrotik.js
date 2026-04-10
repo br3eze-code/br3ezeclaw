@@ -20,7 +20,6 @@ const toolSchemas = {
     password: Joi.string().min(6).required(),
     profile: Joi.string().valid('default', '1hour', '1day', '1week').default('default')
   })
-};
 // ============================================================================
 // CONSTANTS
 // ============================================================================
