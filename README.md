@@ -1,4 +1,52 @@
+# 🤖 AgentOS — Network Intelligence Platform
 ## AgentOS Architecture
+
+> **AI-powered MikroTik management with multi-channel control via Telegram, WhatsApp, and WebSocket CLI**
+
+[![Version](https://img.shields.io/badge/version-2026.5.2-blue)](...)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+## ✨ Features
+
+- 🔥 **AI Coordinator** — Gemini 2.5 ReAct engine for natural language router management
+- 💬 **Unified Messaging** — Control via Telegram, WhatsApp, or WebSocket CLI
+- 🎫 **Voucher System** — Automated WiFi access codes with Mastercard A2A payments
+- 🌐 **Multi-Router Mesh** — Manage multiple MikroTik nodes from one interface
+- 📊 **Real-time Monitoring** — System stats, alerts, and financial reporting
+- 🔒 **Enterprise Security** — CVE-2026-1526 patched, rate-limited, audit trails
+
+ ```bash
+# 1. Clone
+git clone https://github.com/br3eze-code/br3ezeclaw.git
+cd br3ezeclaw
+
+# 2. Install
+npm install
+
+# 3. Configure
+cp .env.example .env
+# Edit .env with your MikroTik credentials
+
+# 4. Start
+npm run dev        # Daemon mode
+npm run cli        # Interactive CLI
+```
+📖 Documentation
+Installation Guide
+API Reference
+Telegram Bot Setup
+WhatsApp Integration
+🛠️ Tech Stack
+| Component  | Technology                            |
+| ---------- | ------------------------------------- |
+| Router API | MikroTik RouterOS API                 |
+| AI Engine  | Google Gemini 2.5 Flash               |
+| Messaging  | Telegram Bot API + Baileys (WhatsApp) |
+| Payments   | Mastercard A2A                        |
+| Database   | Firebase / Local JSON                 |
+| Gateway    | WebSocket + Express                   |
+
+
 ```bash
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -109,3 +157,7 @@ agentos
 ├── --dev                Development profile
 └── --profile <name>     Named profile
 ```
+🤝 Contributing
+See CONTRIBUTING.md
+📜 License
+MIT © [Brighton Mzacana]
