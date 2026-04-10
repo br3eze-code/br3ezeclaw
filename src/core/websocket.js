@@ -1,4 +1,5 @@
 const WebSocket = require('ws');
+const { Queue } = require('bull');
 const crypto = require('crypto');
 const { logger } = require('./logger');
 const { getConfig } = require('./config');
@@ -13,7 +14,7 @@ class WebSocketGateway {
             path: '/ws',
             verifyClient: this.verifyClient.bind(this)
         });
-
+this.messageQueue = new PQueue({ concurrency: 5 });
         this.clients = new Map();
         this.setupHandlers();
 
@@ -64,6 +65,7 @@ if (!token) return false;
     }
 
     async handleMessage(clientId, data) {
+         return this.messageQueue.add(() => this.processMessage(clientId, data));
         try {
             const message = JSON.parse(data);
             const client = this.clients.get(clientId);
