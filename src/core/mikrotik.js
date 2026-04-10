@@ -7,8 +7,20 @@
 const { RouterOSClient } = require('routeros-client');
 const { logger } = require('./logger');
 const { getConfig } = require('./config');
+const Joi = require('joi');
 const EventEmitter = require('events');
 
+const toolSchemas = {
+  'ping': Joi.object({
+    host: Joi.string().hostname().required(),
+    count: Joi.number().integer().min(1).max(100).default(4)
+  }),
+  'user.add': Joi.object({
+    username: Joi.string().alphanum().min(3).max(50).required(),
+    password: Joi.string().min(6).required(),
+    profile: Joi.string().valid('default', '1hour', '1day', '1week').default('default')
+  })
+};
 // ============================================================================
 // CONSTANTS
 // ============================================================================
@@ -275,6 +287,12 @@ class MikroTikManager extends EventEmitter {
   // --------------------------------------------------------------------------
 
   async executeTool(toolName, ...args) {
+    const schema = toolSchemas[toolName];
+      if (schema) {
+    const { error, value } = schema.validate(params);
+    if (error) throw new ToolExecutionError(toolName, `Invalid params: ${error.message}`);
+    params = value; 
+  }
     this._ensureConnected();
     
     const tool = this.tools.get(toolName);
