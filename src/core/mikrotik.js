@@ -7,6 +7,7 @@
 const { RouterOSClient } = require('routeros-client');
 const { logger } = require('./logger');
 const { getConfig } = require('./config');
+const NodeCache = require('node-cache');
 const Joi = require('joi');
 const EventEmitter = require('events');
 
@@ -32,6 +33,55 @@ const HEARTBEAT_INTERVAL = 30000;
 // ============================================================================
 // ERROR CLASSES
 // ============================================================================
+class CircuitBreaker {
+  constructor(threshold = 5, timeout = 60000) {
+    this.failures = 0;
+    this.threshold = threshold;
+    this.timeout = timeout;
+    this.state = 'CLOSED'; // CLOSED, OPEN, HALF_OPEN
+    this.nextAttempt = Date.now();
+  }
+  
+  async execute(fn) {
+    if (this.state === 'OPEN') {
+      if (Date.now() < this.nextAttempt) {
+        throw new Error('Circuit breaker is OPEN');
+      }
+      this.state = 'HALF_OPEN';
+    }
+    
+    try {
+      const result = await fn();
+      this.onSuccess();
+      return result;
+    } catch (error) {
+      this.onFailure();
+      throw error;
+    }
+  }
+  
+  onSuccess() {
+    this.failures = 0;
+    this.state = 'CLOSED';
+  }
+  
+  onFailure() {
+    this.failures += 1;
+    if (this.failures >= this.threshold) {
+      this.state = 'OPEN';
+      this.nextAttempt = Date.now() + this.timeout;
+    }
+  }
+}
+
+// Use in MikroTikManager:
+this.circuitBreaker = new CircuitBreaker();
+async executeTool(toolName, ...args) {
+  return this.circuitBreaker.execute(() => {
+    const tool = this.tools.get(toolName);
+    return tool(...args);
+  });
+}
 
 class MikroTikError extends Error {
   constructor(message, code, originalError = null) {
@@ -92,7 +142,7 @@ module.exports = { MikroTikPool };
 class MikroTikManager extends EventEmitter {
   constructor(options = {}) {
     super();
-    
+    this.cache = new NodeCache({ stdTTL: 30, checkperiod: 60 });
     this.config = {
       host: options.host || getConfig().mikrotik?.host || '192.168.88.1',
       user: options.user || getConfig().mikrotik?.user || 'admin',
@@ -478,10 +528,24 @@ class MikroTikManager extends EventEmitter {
 
   async getSystemStats() {
     this._ensureConnected();
+       const cacheKey = 'system_stats';
+    if (!force) {
+      const cached = this.cache.get(cacheKey);
+      if (cached) return cached;
+    }
     const resources = await this.state.conn.menu('/system/resource').get();
     return resources[0] || null;
   }
-
+    const stats = await this.state.conn.menu('/system/resource').get();
+    this.cache.set(cacheKey, stats[0]);
+    return stats[0];
+  }
+  
+  invalidateCache(pattern) {
+    const keys = this.cache.keys();
+    keys.filter(k => k.includes(pattern)).forEach(k => this.cache.del(k));
+  }
+}
   async getLogs(lines = 10) {
     this._ensureConnected();
     const logs = await this.state.conn.menu('/log').get();
