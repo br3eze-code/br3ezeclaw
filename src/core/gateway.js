@@ -111,7 +111,14 @@ class Gateway {
         }
     }
 }
-
+async shutdown(signal) {
+  logger.info(`${signal} received, shutting down...`);
+  
+  const forceExit = setTimeout(() => {
+    logger.error('Forced shutdown due to timeout');
+    process.exit(1);
+  }, 10000); // 10s timeout
+  
 // Factory function for CLI
 async function startGateway(options = {}) {
     const gateway = new Gateway(options);
