@@ -1,0 +1,140 @@
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="zw.power.www" version="1.0.0" 
+    xmlns="http://www.w3.org/ns/widgets"
+    xmlns:cdv="http://cordova.apache.org/ns/1.0"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    
+    <name>Power Connect</name>
+    <description>WiFi Billing System by Br3eze Africa</description>
+    <author email="support@br3eze.africa" href="https://br3eze.africa">
+        Br3eze Africa Team
+    </author>
+    
+    <content src="index.html" />
+    
+    <!-- Global Preferences -->
+    <preference name="Orientation" value="portrait" />
+    <preference name="DisallowOverscroll" value="true" />
+    <preference name="Fullscreen" value="false" />
+    <preference name="BackgroundColor" value="#FFFFFF" />
+    <!-- AndroidX Support (Required) -->
+    <preference name="AndroidXEnabled" value="true" />
+    <preference name="GradlePluginKotlinEnabled" value="true" />
+    <preference name="GradlePluginKotlinCodeStyle" value="official" />
+    <preference name="GradlePluginKotlinVersion" value="1.7.21" />
+    
+    <!-- Intent Whitelist -->
+    <allow-intent href="http://*/*" />
+    <allow-intent href="https://*/*" />
+    <allow-intent href="tel:*" />
+    <allow-intent href="mailto:*" />
+    <allow-intent href="geo:*" />
+
+    <platform name="android">
+    <!-- Android SDK Versions -->
+        <allow-intent href="market:*" />
+
+        <preference name="android-minSdkVersion" value="24" />
+        <preference name="android-compileSdkVersion" value="35" />
+        <preference name="android-targetSdkVersion" value="35" />
+        
+    <!-- AndroidManifest Permissions -->
+        <config-file target="app/src/main/AndroidManifest.xml" parent="/manifest" xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- ===== WiFi & Network Permissions ===== -->
+            <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+            <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+            <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+            <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+            <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 13+ WiFi (API 33+) -->
+            <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"   android:usesPermissionFlags="neverForLocation" />
+    <!-- ===== Background Service ===== -->
+            <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+            <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+            <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- ===== Notification Permissions ===== -->
+            <!-- Android 13+ (API 33+) -->
+            <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />        
+            <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <!-- ===== Location Permissions ===== -->
+            <!-- Required for WiFi scanning on Android 10+ -->
+            <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+            <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+        
+        <!-- Android 10+ Background Location (if needed) -->
+            <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+        <!-- ===== Storage Permissions ===== -->
+        <!-- Legacy storage for Android 10- -->
+            <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+            <uses-permission android:name="android.permission.ACCESS_EXTERNAL_STORAGE" />
+        <!-- ===== Camera Permission (for QR/Plan images) ===== -->
+            <uses-permission android:name="android.permission.CAMERA" />
+        <!-- ===== Biometric Permission ===== -->
+            <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+            <uses-permission android:name="android.permission.USE_FINGERPRINT" />
+        <!-- ===== Battery Optimization ===== -->
+            <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+        <!-- Required to discover devices -->
+        <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+                         android:usesPermissionFlags="neverForLocation" />
+        
+        <!-- Required to connect to devices -->
+        <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+        
+        <!-- Required to broadcast/advertise your device -->
+        <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+        <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+        <!-- LEGACY PERMISSIONS (Android 11 and below) -->
+        <!-- These are ignored on Android 12 due to maxSdkVersion="30" -->
+        <uses-permission android:name="android.permission.BLUETOOTH"
+                         android:maxSdkVersion="30" />
+        <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+                         android:maxSdkVersion="30" />
+        <!--Features-->
+        <uses-feature
+    android:name="android.hardware.bluetooth"
+    android:required="false" />
+
+
+<feature name="MyGeminiNano">
+<param name="android-package" value="zw.power.custom-plugins.cordova.plugin.aicore"/>
+</feature>
+
+<uses-feature
+    android:name="android.hardware.bluetooth_le"
+    android:required="false" />
+            <uses-feature android:name="android.hardware.camera" android:required="false"/>
+            <uses-feature android:name="android.hardware.location.gps" android:required="false"/>
+            <uses-feature android:name="android.hardware.wifi" android:required="false"/>
+            <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
+            <uses-feature android:name="android.hardware.biometrics" android:required="false" />
+            <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false"/>
+        </config-file>
+
+        <!-- App Icons -->
+        <icon src="www/images/logo/logo.png" density="mdpi" />
+        <icon src="www/images/logo/logo.png" density="hdpi" />
+        <icon src="www/images/logo/logo.png" density="xhdpi" />
+        <icon src="www/images/logo/logo.png" density="xxhdpi" />
+        <icon src="www/images/logo/logo.png" density="xxxhdpi" />
+
+        <!-- Custom Resource File -->
+        <resource-file src="www/res/android/my-color.xml" target="app/src/main/res/values/my-colors.xml" />
+        
+        <!-- Splash Screen (Modern Android 12+) -->
+        <preference name="AndroidWindowSplashScreenAnimatedIcon" value="www/res/android/logo.png" />
+        <preference name="AndroidWindowSplashScreenBackground" value="#FFFFFF" />
+        <preference name="AndroidPersistentFileLocation" value="Compatibility" />
+        <preference name="AndroidLaunchMode" value="singleTask" />
+
+        
+<queries>
+    <intent>
+        <action android:name="android.intent.action.OPEN_DOCUMENT" />
+        <category android:name="android.intent.category.OPENABLE" />
+        <data android:mimeType="*/*" />
+    </intent>
+</queries>
+    </platform>
+</widget>

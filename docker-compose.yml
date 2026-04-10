@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mikrotik-auth
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - LOG_LEVEL=info
+      - FIREBASE_SERVICE_ACCOUNT_PATH=/app/config/serviceAccountKey.json
+      - FIREBASE_DATABASE_URL=${FIREBASE_DATABASE_URL}
+      - MIKROTIK_HOST=${MIKROTIK_HOST}
+      - MIKROTIK_USER=${MIKROTIK_USER}
+      - MIKROTIK_PASSWORD=${MIKROTIK_PASSWORD}
+      - MIKROTIK_REST_URL=${MIKROTIK_REST_URL}
+      - SERVER_URL=${SERVER_URL}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+    volumes:
+      - ./serviceAccountKey.json:/app/config/serviceAccountKey.json:ro
+      - ./logs:/app/logs
+    networks:
+      - mikrotik-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  redis:
+    image: redis:7-alpine
+    container_name: mikrotik-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    networks:
+      - mikrotik-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: mikrotik-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./mikrotik/hotspot:/var/www/hotspot:ro
+    depends_on:
+      - app
+    networks:
+      - mikrotik-network
+
+volumes:
+  redis-data:
+
+
+networks:
+  mikrotik-network:
+    driver: bridge
