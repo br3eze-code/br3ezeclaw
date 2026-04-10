@@ -131,17 +131,6 @@ tail -f logs/agentos.log
 - 📊 **Real-time Monitoring** — System stats, alerts, and financial reporting
 - 🔒 **Enterprise Security** — CVE-2026-1526 patched, rate-limited, audit trails
 
-
-## 🛠️ Tech Stack
-| Component  | Technology                            |
-| ---------- | ------------------------------------- |
-| Router API | MikroTik RouterOS API                 |
-| AI Engine  | Google Gemini 2.5 Flash               |
-| Messaging  | Telegram Bot API + Baileys (WhatsApp) |
-| Payments   | Mastercard A2A                        |
-| Database   | Firebase / Local JSON                 |
-| Gateway    | WebSocket + Express                   |
-
 🏗️ Architecture
 ```bash
 
@@ -278,7 +267,47 @@ agentos
 ├── --dev                Development profile
 └── --profile <name>     Named profile
 ```
+📚 Documentation
+| Topic                | Link                                 |
+| -------------------- | ------------------------------------ |
+| Installation Guide   | [docs/install.md](docs/install.md)   |
+| Telegram Bot Setup   | [docs/telegram.md](docs/telegram.md) |
+| WhatsApp Integration | [docs/whatsapp.md](docs/whatsapp.md) |
+| API Reference        | [docs/api.md](docs/api.md)           |
+| Contributing         | [CONTRIBUTING.md](CONTRIBUTING.md)   |
+
+🛠️ Tech Stack
+| Layer          | Technology                                      |
+| -------------- | ----------------------------------------------- |
+| **Router API** | MikroTik RouterOS API (routeros-client)         |
+| **AI Engine**  | Google Gemini 2.5 Flash                         |
+| **Messaging**  | node-telegram-bot-api + @whiskeysockets/baileys |
+| **Payments**   | Mastercard A2A (Account-to-Account)             |
+| **Database**   | Firebase Firestore / Local JSON                 |
+| **Gateway**    | WebSocket (ws) + Express                        |
+| **CLI**        | Commander.js                                    |
+| **Security**   | Helmet, Rate-limit, Joi validation              |
+
 🤝 Contributing
-See CONTRIBUTING.md
+We welcome contributions! Please see CONTRIBUTING.md for guidelines.
+
+Quick Contributions 
+
+⭐ Star this repository
+🐛 Report bugs via Issues
+💡 Suggest features via Discussions
+📖 Improve documentation
+🔧 Submit PRs for good first issues
 📜 License
-MIT © [Brighton Mzacana]
+Apache © 2026 [Brighton Mzacana]
+<p align="center">
+  <a href="https://github.com/br3eze-code/br3ezeclaw/stargazers">
+    <img src="https://img.shields.io/github/stars/br3eze-code/br3ezeclaw?style=social" alt="Stars">
+  </a>
+  <a href="https://github.com/br3eze-code/br3ezeclaw/network/members">
+    <img src="https://img.shields.io/github/forks/br3eze-code/br3ezeclaw?style=social" alt="Forks">
+  </a>
+</p>
+<p align="center"><strong>⭐ Star this repo if it helps you manage your network!</strong></p>
+
+
