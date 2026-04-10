@@ -1,4 +1,4 @@
-# 🤖 AgentOS — Network Intelligence Platform
+
 <p align="center">
   <img src="https://img.shields.io/badge/AgentOS-2026.5.2-blue?style=for-the-badge&logo=router&logoColor=white" alt="Version">
   <img src="https://img.shields.io/badge/MikroTik-RouterOS-green?style=for-the-badge&logo=mikrotik" alt="MikroTik">
