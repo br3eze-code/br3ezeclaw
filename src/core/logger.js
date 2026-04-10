@@ -19,6 +19,17 @@ const consoleFormat = printf(({ level, message, timestamp, service, ...metadata 
   const meta = Object.keys(metadata).length ? JSON.stringify(metadata, null, 2) : '';
   return `${timestamp} [${service || 'agentos'}] ${level}: ${message} ${meta}`;
 });
+const auditLog = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.File({ filename: 'logs/audit.log' }),
+    new winston.transports.Console({ format: winston.format.simple() })
+  ]
+});
 
 // Create logger instance
 const logger = winston.createLogger({
