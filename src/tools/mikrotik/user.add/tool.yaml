@@ -1,0 +1,163 @@
+# AgentOS Tool Definition
+# Tool: mikrotik.user.add
+# Description: Create or update a hotspot user on MikroTik RouterOS
+
+apiVersion: agentos.ai/v1
+kind: Tool
+metadata:
+  name: mikrotik.user.add
+  category: network
+  provider: mikrotik
+  version: 1.0.0
+  author: AgentOS Team
+  description: |
+    Creates a new hotspot user or updates an existing user on the MikroTik router.
+    Automatically handles user creation vs update based on existence check.
+  tags: [mikrotik, hotspot, user, create, update]
+  icon: 👤
+
+spec:
+  # Execution configuration
+  execution:
+    mode: direct          # direct | queued | sandboxed
+    timeout: 10000        # milliseconds
+    retries: 3
+    retryDelay: 1000
+  
+  # Input schema
+  input:
+    schema:
+      type: object
+      required: [username, profile]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 32
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: Hotspot username
+          examples: ["john_doe", "guest001"]
+        
+        password:
+          type: string
+          minLength: 3
+          maxLength: 64
+          description: User password (defaults to username if not provided)
+        
+        profile:
+          type: string
+          description: Hotspot profile/plan name
+          enum: [default, 1hour, 1day, 1week, 1month]
+          default: default
+        
+        sharedUsers:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 1
+          description: Number of simultaneous connections allowed
+    
+    # Parameter validation rules
+    validation:
+      - rule: username_not_reserved
+        message: "Username 'admin' is reserved"
+        check: "input.username !== 'admin'"
+      
+      - rule: password_strength
+        message: "Password must be at least 3 characters"
+        check: "(input.password || input.username).length >= 3"
+
+  # Output schema
+  output:
+    schema:
+      type: object
+      properties:
+        success:
+          type: boolean
+        action:
+          type: string
+          enum: [created, updated]
+        username:
+          type: string
+        profile:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    
+    # Error definitions
+    errors:
+      - code: CONNECTION_FAILED
+        message: "Could not connect to MikroTik router"
+        retryable: true
+      
+      - code: USER_EXISTS_BLOCKED
+        message: "User exists but is disabled/blocked"
+        retryable: false
+      
+      - code: INVALID_PROFILE
+        message: "Specified profile does not exist on router"
+        retryable: false
+
+  # Resource requirements
+  resources:
+    requires:
+      - mikrotik.connection
+    produces:
+      - mikrotik.user
+
+  # Security
+  security:
+    permissions: [mikrotik:write]
+    auditLog: true
+    sensitiveParams: [password]
+
+  # Documentation
+  documentation:
+    summary: "Create or update hotspot user"
+    description: |
+      This tool manages hotspot users on the MikroTik router. If the user
+      already exists, it updates the password and profile. If not, it
+      creates a new user with the specified settings.
+    
+    examples:
+      - name: Create basic user
+        input:
+          username: "guest001"
+          profile: "1hour"
+        expected:
+          success: true
+          action: "created"
+      
+      - name: Update existing user
+        input:
+          username: "existing_user"
+          password: "newpass123"
+          profile: "1day"
+        expected:
+          success: true
+          action: "updated"
+    
+    cli:
+      command: "agentos tools run mikrotik.user.add --username guest001 --profile 1hour"
+      interactive: true
+
+  # Hooks
+  hooks:
+    preExecute:
+      - validateConnection
+      - checkProfileExists
+    
+    postExecute:
+      - logAudit
+      - notifyTelegram
+      - updateMetrics
+
+  # Related tools
+  relations:
+    dependsOn: []
+    usedBy: [voucher.create, user.bulk.import]
+    alternatives: [radius.user.add]
+    seeAlso: [mikrotik.user.remove, mikrotik.user.kick]

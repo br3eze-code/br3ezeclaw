@@ -1,0 +1,70 @@
+apiVersion: agentos.ai/v1
+kind: Tool
+metadata:
+  name: mikrotik.network.ping
+  category: network
+  provider: mikrotik
+  version: 1.0.0
+  author: AgentOS Team
+  description: |
+    Pings a host on the MikroTik network to check connectivity.
+  tags: [mikrotik, network, ping, connectivity]
+  icon: 🏓
+
+spec:
+  execution:
+    mode: direct
+    timeout: 5000
+    retries: 2
+  
+  input:
+    schema:
+      type: object
+      required: [address]
+      properties:
+        address:
+          type: string
+          format: ipv4
+          description: IP address to ping
+        count:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 4
+          description: Number of ping packets
+    
+    validation:
+      - rule: valid_ip
+        message: "Invalid IP address format"
+        check: "input.address matches /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/"
+  
+  output:
+    schema:
+      type: object
+      properties:
+        success: { type: boolean }
+        host: { type: string }
+        results: { type: array }
+        stats: { type: object }
+    
+    errors:
+      - code: HOST_UNREACHABLE
+        message: "Host is not reachable"
+        retryable: true
+  
+  resources:
+    requires: [mikrotik.connection]
+  
+  security:
+    permissions: [mikrotik:read]
+    auditLog: true
+  
+  documentation:
+    summary: "Ping a host"
+    examples:
+      - name: Ping Google DNS
+        input: { address: "8.8.8.8" }
+        expected: { success: true, host: "8.8.8.8" }
+    
+    cli:
+      command: "agentos tools run mikrotik.network.ping --address [IP_ADDRESS]"
