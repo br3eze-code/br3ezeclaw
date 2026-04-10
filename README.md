@@ -1,5 +1,121 @@
 # 🤖 AgentOS — Network Intelligence Platform
-## AgentOS Architecture
+<p align="center">
+  <img src="https://img.shields.io/badge/AgentOS-2026.5.2-blue?style=for-the-badge&logo=router&logoColor=white" alt="Version">
+  <img src="https://img.shields.io/badge/MikroTik-RouterOS-green?style=for-the-badge&logo=mikrotik" alt="MikroTik">
+  <img src="https://img.shields.io/badge/AI-Gemini%202.5-orange?style=for-the-badge&logo=google" alt="AI">
+</p>
+<h1 align="center">🤖 AgentOS</h1>
+<p align="center"><strong>Network Intelligence Platform — AI-powered MikroTik management via Telegram, WhatsApp & CLI</strong></p>
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#documentation">Docs</a> •
+  <a href="#demo">Demo</a> •
+  <a href="#contributing">Contributing</a>
+</p>
+
+---
+## ✨ Why AgentOS?
+
+Managing MikroTik routers shouldn't require memorizing CLI commands or keeping WinBox open 24/7. AgentOS brings **conversational AI** to network administration — control your infrastructure through natural language on your favorite messaging platform.
+
+### The Problem
+Traditional: Open WinBox → Navigate to IP → Hotspot → Active → Find User → Click Kick
+AgentOS:    Send "kick john" in Telegram → Done in 2 seconds
+
+---
+
+## 🚀 Features
+
+<table>
+<tr>
+<td width="50%">
+
+### 🤖 AI Coordinator
+- Natural language router management
+- Gemini 2.5 ReAct reasoning engine
+- Context-aware command suggestions
+
+### 💬 Multi-Channel Control
+- **Telegram Bot** — Rich inline keyboards
+- **WhatsApp** — Baileys-powered messaging
+- **WebSocket CLI** — Terminal-like experience in browser
+- **REST API** — Programmatic access
+
+</td>
+<td width="50%">
+
+### 🎫 Voucher System
+- Automated WiFi access codes
+- **Mastercard A2A** payment integration
+- QR code generation
+- Wallet-based voucher storage
+
+### 🌐 Enterprise Ready
+- Multi-router mesh management
+- Real-time monitoring & alerts
+- Audit trails & rate limiting
+- CVE-2026-1526 security patched
+
+</td>
+</tr>
+</table>
+
+---
+
+## 📦 Installation
+
+```bash
+# Clone repository
+git clone https://github.com/br3eze-code/br3ezeclaw.git
+cd br3ezeclaw
+
+# Install dependencies
+npm install
+
+# Interactive setup
+npm run onboard
+
+# Or manual configuration
+cp .env.example .env
+# Edit .env with your MikroTik credentials
+```
+🎮 Quick Start
+CLI Mode
+```
+# Start interactive CLI
+npm start
+
+# Or run specific commands
+agentos status                    # Quick overview
+agentos network ping 8.8.8.8      # Ping test
+agentos users kick john          # Disconnect user
+agentos voucher create 1Day      # Generate voucher
+```
+Daemon Mode (with Telegram/WhatsApp)
+```
+# Start gateway
+agentos gateway --daemon
+
+# Check status
+agentos gateway:status
+
+# View logs
+tail -f logs/agentos.log
+```
+## 📸 Screenshots
+<p align="center">
+  <img src="docs/images/cli-demo.gif" width="600" alt="CLI Demo">
+  <br>
+  <em>Interactive CLI with real-time router feedback</em>
+</p>
+<p align="center">
+  <img src="docs/images/telegram-bot.png" width="300" alt="Telegram Bot">
+  &nbsp;&nbsp;
+  <img src="docs/images/whatsapp-chat.png" width="300" alt="WhatsApp">
+  <br>
+  <em>Unified messaging interface</em>
+</p>
 
 > **AI-powered MikroTik management with multi-channel control via Telegram, WhatsApp, and WebSocket CLI**
 
@@ -50,7 +166,7 @@ npm run cli        # Interactive CLI
 | Database   | Firebase / Local JSON                 |
 | Gateway    | WebSocket + Express                   |
 
-
+🏗️ Architecture
 ```bash
 
 ┌─────────────────────────────────────────────────────────────┐
