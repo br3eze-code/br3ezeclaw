@@ -20,8 +20,9 @@
 Managing MikroTik routers shouldn't require memorizing CLI commands or keeping WinBox open 24/7. AgentOS brings **conversational AI** to network administration — control your infrastructure through natural language on your favorite messaging platform.
 
 ### The Problem
--Traditional: Open WinBox → Navigate to IP → Hotspot → Active → Find User → Click Kick
--AgentOS:    Send "kick john" in Telegram → Done in 2 seconds
+1.Traditional: Open WinBox → Navigate to IP → Hotspot → Active → Find User → Click Kick
+
+2AgentOS:    Send "kick john" in Telegram → Done in 2 seconds
 
 ---
 
