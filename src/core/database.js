@@ -135,34 +135,6 @@ class Database {
             .slice(0, limit)
             .map(([id, data]) => ({ id, ...data }));
     }
-
-    async createVoucher(code, data) {
-        this.data.set(code, { ...data, used: false });
-        return { code, ...data };
-    }
-
-    async getVoucher(code) {
-        return this.data.get(code) || null;
-    }
-
-    async deleteVoucher(code) {
-        this.data.delete(code);
-    }
-
-    async getRecentVouchers(limit = 10) {
-        return Array.from(this.data.entries())
-            .slice(-limit)
-            .map(([code, data]) => ({ code, ...data }));
-    }
-
-    async getStats() {
-        const all = Array.from(this.data.values());
-        return {
-            total: all.length,
-            used: all.filter(v => v.used).length,
-            active: all.filter(v => !v.used).length
-        };
-    }
 }
 
 let instance = null;
