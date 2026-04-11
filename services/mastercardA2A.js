@@ -430,6 +430,21 @@ class MastercardA2AService {
             processed: true,
         };
     }
+    verifyWebhookSignature(rawBody, signature) {
+    const secret = process.env.MASTERCARD_WEBHOOK_SECRET;
+    if (!secret) {
+        // Webhook secret not configured — reject to be safe
+        return false;
+    }
+    const expected = require('crypto')
+        .createHmac('sha256', secret)
+        .update(rawBody)
+        .digest('hex');
+    const provided = Buffer.from(signature);
+    const computed = Buffer.from(expected);
+    if (provided.length !== computed.length) return false;
+    return require('crypto').timingSafeEqual(provided, computed);
+}
 }
 
 module.exports = MastercardA2AService;
