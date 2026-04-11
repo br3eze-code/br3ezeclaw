@@ -579,16 +579,13 @@ class MikroTikManager extends EventEmitter {
       throw new ToolExecutionError('ping', 'Invalid host format');
     }
 
-    const result = await this.state.conn
-      .menu('/ping')
-      .call({
-        address: host,
-        count: Math.max(1, Math.min(count, 100)).toString()
-      });
-
-    return Array.isArray(result) ? result : [result];
-  }
-
+  const results = await this.state.conn.write([
+    '/tool/ping',
+    `=address=${host}`,
+    `=count=${Math.max(1, Math.min(count, 100)).toString()}`
+]);
+return Array.isArray(results) ? results : (results ? [results] : []);
+    
   async traceroute(host) {
     this._ensureConnected();
 
