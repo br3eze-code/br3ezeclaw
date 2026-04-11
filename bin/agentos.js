@@ -44,9 +44,6 @@ const ensureProfile = () => {
     return dir;
 };
 
-// Global config path
-const CONFIG_PATH = path.join(ensureProfile(), 'config.json');
-const STATE_PATH = path.join(ensureProfile(), 'state');
 
 // Ensure state directory
 if (!fs.existsSync(STATE_PATH)) {
@@ -62,19 +59,6 @@ global.AGENTOS = {
     IS_DEV: process.argv.includes('--dev')
 };
 
-// Print banner if not --no-banner
-if (!process.argv.includes('--no-banner') && !process.argv.includes('--json')) {
-    console.log(boxen(
-        `${chalk.cyan.bold(`${BRAND.emoji} ${BRAND.name} ${BRAND.version}`)}\n` +
-        `${chalk.gray(BRAND.tagline)}`,
-        {
-            padding: 1,
-            margin: 1,
-            borderStyle: 'round',
-            borderColor: 'cyan'
-        }
-    ));
-}
 
 // Initialize Commander program
 program
