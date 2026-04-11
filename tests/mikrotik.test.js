@@ -1,5 +1,5 @@
 const { MikroTikManager, testConnection } = require('../src/core/mikrotik');
-const { ConnectionError, ToolExecutionError } = require('../src/core/errors');
+const { ConnectionError, ToolExecutionError } = require('../src/core/error');
 
 describe('MikroTikManager', () => {
   let manager;
