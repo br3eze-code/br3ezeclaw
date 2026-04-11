@@ -164,11 +164,15 @@ module.exports = (program) => {
                 createdAt: new Date().toISOString(),
                 mikrotik: mikrotikConfig,
                 telegram: telegramConfig,
+         const existingToken = fs.existsSync(CONFIG_PATH)
+    ? JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))?.gateway?.token
+    : null;
                 gateway: {
                     ...gatewayConfig,
                     host: '127.0.0.1',
-                    token: require('crypto').randomBytes(32).toString('hex')
-                },
+                  token: existingToken || process.env.AGENTOS_GATEWAY_TOKEN
+        || require('crypto').randomBytes(32).toString('hex')
+},
                 plans,
                 features: {
                     vouchers: true,
