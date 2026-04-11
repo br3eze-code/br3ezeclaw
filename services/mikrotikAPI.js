@@ -9,8 +9,8 @@ class MikroTikAPI {
 
         // Create axios instance with SSL verification disabled (for self-signed certs)
         this.client = axios.create({
-            httpsAgent: new https.Agent({
-                rejectUnauthorized: false
+    httpsAgent: new https.Agent({
+        rejectUnauthorized: process.env.NODE_ENV === 'production'
             }),
             auth: {
                 username: this.username,
