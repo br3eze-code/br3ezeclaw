@@ -12,18 +12,28 @@ class AskEngine {
     
     // Try exact match first
     const normalized = query.toLowerCase().trim();
-  if (fallbackCommands[normalized]) {
-    return { command: fallbackCommands[normalized], source: 'fallback' };
+  // Quick regex patterns for common queries
+  if (/who is active|active users|online users/.test(normalized)) {
+    return { command: '/users', confidence: 1.0 };
+  }
+  if (/restart|reboot router/.test(normalized)) {
+    return { command: '/reboot', confidence: 1.0 };
+  }
   
-    
+  // Fallback to AI only for complex queries
   try {
-    return await this.geminiProcess(query);
+    const aiResult = await Promise.race([
+      this.geminiProcess(query),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('AI Timeout')), 5000)
+      )
+    ]);
+    return aiResult;
   } catch (e) {
-    console.error('AI Error:', e.message);
-    return { 
-      error: 'AI unavailable', 
-      message: 'Available commands: /users, /stats, /reboot, /voucher',
-      fallback: '/menu' 
+    return {
+      error: true,
+      message: 'I didn\'t understand. Try: /users, /stats, /reboot, /voucher',
+      suggestions: ['/users', '/stats', '/menu']
     };
   }
 }
