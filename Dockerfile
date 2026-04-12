@@ -1,5 +1,5 @@
 # Multi-stage build for production
-FROM node:18-alpine AS builder
+FROM node:20-alpine
 
 WORKDIR /app
 
@@ -8,7 +8,7 @@ COPY server/package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 
 # Production stage
-FROM node:18-alpine AS production
+FROM node:20-alpine AS production
 
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
@@ -34,6 +34,8 @@ USER nodejs
 
 # Expose port
 EXPOSE 3000
+# Create skills directory
+RUN mkdir -p /app/skills
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
