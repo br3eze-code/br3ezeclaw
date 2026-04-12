@@ -7,6 +7,22 @@ const chalk = require('chalk');
 const fs = require('fs');
 
 module.exports = (program) => {
+
+        program
+  .command('dashboard')
+  .description('Show dashboard overview')
+  .action(async () => {
+    // Aggregate data from multiple sources
+    const mikrotik = await getMikroTikClient();
+    const [stats, activeUsers] = await Promise.all([
+      mikrotik.getSystemStats(),
+      mikrotik.getActiveUsers()
+    ]);
+    
+    console.log(chalk.cyan('\n📊 Dashboard\n'));
+    console.log(`CPU: ${stats['cpu-load']}% | Uptime: ${stats.uptime}`);
+    console.log(`Active Users: ${activeUsers.length}`);
+  });
     program
         .command('status')
         .description('Show system status')
