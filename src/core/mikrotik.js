@@ -450,10 +450,13 @@ class MikroTikManager extends EventEmitter {
  
         const stats = await this.state.conn.menu('/system/resource').get();
         const result = stats[0] || null;
-        if (result) this.cache.set(cacheKey, result);
-        return result;
-    }
+  if (result) {
+    result['cpu-load'] = result['cpu-load'] || result['cpu-load'] || result.cpu || '0';
+  }
   
+    if (result) this.cache.set(cacheKey, result);
+  return result;
+}
    async getLogs(lines = 10) {
         this._ensureConnected();
         const logs = await this.state.conn.menu('/log').get();
