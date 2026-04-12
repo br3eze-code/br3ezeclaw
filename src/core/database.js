@@ -69,7 +69,9 @@ class Database {
     async createVoucher(code, data) {
         const voucherData = {
             ...data,
-            createdAt: admin.firestore?.FieldValue?.serverTimestamp() || new Date(),
+            createdAt: this.db
+    ? admin.firestore.FieldValue.serverTimestamp()
+    : new Date().toISOString(),
             used: false
         };
 
