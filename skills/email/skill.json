@@ -1,0 +1,36 @@
+// skills/email/skill.json
+{
+  "name": "email",
+  "version": "1.0.0",
+  "description": "Send and manage emails across providers",
+  "domain": "communication",
+  "entry": "index.js",
+  "permissions": ["email:send", "email:read"],
+  "parameters": {
+    "action": {
+      "type": "string",
+      "enum": ["send", "read", "search", "delete"],
+      "required": true
+    },
+    "provider": {
+      "type": "string",
+      "enum": ["smtp", "sendgrid", "aws-ses", "gmail-api"],
+      "default": "smtp"
+    },
+    "to": {
+      "type": "string",
+      "description": "Recipient email address"
+    },
+    "subject": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string"
+    },
+    "attachments": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}
+
