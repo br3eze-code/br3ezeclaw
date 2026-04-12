@@ -1,7 +1,7 @@
 /**
  * Structured Logger with Winston
  */
-import { v4 as uuidv4 } from 'uuid';
+const { v4: uuidv4 } = require('uuid');
 const winston = require('winston');
 const path = require('path');
 const fs = require('fs');
