@@ -80,7 +80,36 @@ class RuntimeSession {
 // ── AgentRuntime ──────────────────────────────────────────────────────────────
 
 class AgentRuntime extends EventEmitter {
-    constructor(config = {}) {
+    constructor(config) {
+    this.llm = new GeminiProvider(config.geminiKey);
+    
+    // Network Domain (existing)
+    this.networkTools = new ToolRegistry('network');
+    this.networkTools.register(new MikroTikTool());
+    this.networkTools.register(new VoucherTool());
+    this.networkTools.register(new NetworkMonitorTool());
+    
+    // Developer Domain (new)
+    this.devTools = new ToolRegistry('developer');
+    this.devTools.register(new CodeGenTool());
+    this.devTools.register(new GitTool());
+    this.devTools.register(new DeployTool());
+    this.devTools.register(new TestTool());
+    
+    // Cross-domain orchestration
+    this.orchestrator = new DomainOrchestrator({
+      network: this.networkTools,
+      developer: this.devTools
+    });
+    
+    this.policy = new AgentPolicy(config.policy);
+  }
+  
+  // Route intents to appropriate domain
+  async execute(intent) {
+    const domain = this.classifyIntent(intent);
+    return this.orchestrator.route(domain, intent);
+  }
         super();
         this.defaultConfig = {
             permissionMode:   config.permissionMode   || PermissionMode.PROMPT,
