@@ -1,6 +1,6 @@
 {
-  "name": "br3eze-backend",
-  "version": "2026.3.27",
+  "name": "agentos",
+  "version": "2026.4.11",
   "description": "AgentOS — Network Intelligence Operating System",
   "main": "src/core/gateway.js",
   "bin": {
