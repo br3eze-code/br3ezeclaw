@@ -1,178 +1,179 @@
 #!/bin/bash
+# ============================================================
+# AgentOS — Deployment Script
 
 # MikroTik Firebase Auth Server Deployment Script
 
-set -e
+set -euo pipefail
 
 echo "🚀 Starting deployment..."
 
-# Configuration
-PROJECT_NAME="mikrotik-auth"
+# ── Configuration ─────────────────────────────────────────────
+PROJECT_NAME="agentos"
 REGION="us-central1"
-SERVICE_ACCOUNT="mikrotik-auth-sa"
+SERVICE_ACCOUNT="agentos-sa"
+PORT=3000
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# ── Colours ───────────────────────────────────────────────────
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
+log_info()  { echo -e "${GREEN}[INFO]${NC}  $1"; }
+log_warn()  { echo -e "${YELLOW}[WARN]${NC}  $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
-
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# Check prerequisites
+# ── Prerequisites ─────────────────────────────────────────────
 check_prerequisites() {
     log_info "Checking prerequisites..."
-    
-    command -v gcloud >/dev/null 2>&1 || { log_error "gcloud CLI not installed"; exit 1; }
-    command -v docker >/dev/null 2>&1 || { log_error "Docker not installed"; exit 1; }
-    
-    gcloud config get-value project >/dev/null 2>&1 || { log_error "gcloud not authenticated"; exit 1; }
-    
-    log_info "Prerequisites check passed"
-}
-
-# Setup environment
-setup_environment() {
-    log_info "Setting up environment..."
-    
-    if [ ! -f .env ]; then
-        log_error ".env file not found. Please create it from .env.example"
+    for cmd in gcloud docker node; do
+        command -v "$cmd" >/dev/null 2>&1 || { log_error "$cmd not installed"; exit 1; }
+    done
+ 
+    node_major=$(node -e "process.stdout.write(process.versions.node.split('.')[0])")
+    if [ "$node_major" -lt 22 ]; then
+        log_error "Node.js 22+ required (current: $(node --version))"
         exit 1
     fi
-    
-    # Load environment variables
-    export $(grep -v '^#' .env | xargs)
-    
-    # Validate required variables
-    required_vars=("FIREBASE_DATABASE_URL" "MIKROTIK_HOST" "MIKROTIK_PASSWORD" "SERVER_URL")
+ 
+    gcloud config get-value project >/dev/null 2>&1 || {
+        log_error "gcloud not authenticated — run: gcloud auth login"
+        exit 1
+    }
+    log_info "Prerequisites OK"
+}
+
+# ── Environment ───────────────────────────────────────────────
+setup_environment() {
+    log_info "Loading environment..."
+    if [ ! -f .env ]; then
+        log_error ".env not found. Copy .env.example and fill in your values."
+        exit 1
+    fi
+ 
+    set -a; source .env; set +a
+ 
+    required_vars=(
+        "TELEGRAM_BOT_TOKEN"
+        "TELEGRAM_ALLOWED_CHAT_ID"
+        "ROS_HOST"
+        "ROS_PASS"
+    )
+ 
     for var in "${required_vars[@]}"; do
-        if [ -z "${!var}" ]; then
+        if [ -z "${!var:-}" ]; then
             log_error "Required variable $var not set in .env"
             exit 1
         fi
     done
+    log_info "Environment OK"
 }
 
-# Build and push container
+ 
+# ── Build + push ──────────────────────────────────────────────
 build_and_push() {
     log_info "Building Docker image..."
-    
-    IMAGE_TAG="gcr.io/$(gcloud config get-value project)/$PROJECT_NAME:$(git rev-parse --short HEAD)"
-    LATEST_TAG="gcr.io/$(gcloud config get-value project)/$PROJECT_NAME:latest"
-    
-    docker build -t $IMAGE_TAG -t $LATEST_TAG .
-    
-    log_info "Pushing to Container Registry..."
-    docker push $IMAGE_TAG
-    docker push $LATEST_TAG
-    
-    echo $IMAGE_TAG > .image_tag
+    GCP_PROJECT=$(gcloud config get-value project)
+    GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "local")
+    IMAGE_SHA="gcr.io/${GCP_PROJECT}/${PROJECT_NAME}:${GIT_SHA}"
+    IMAGE_LATEST="gcr.io/${GCP_PROJECT}/${PROJECT_NAME}:latest"
+ 
+    docker build -t "$IMAGE_SHA" -t "$IMAGE_LATEST" .
+    docker push "$IMAGE_SHA"
+    docker push "$IMAGE_LATEST"
+ 
+    echo "$IMAGE_SHA" > .image_tag
+    log_info "Image pushed: $IMAGE_SHA"
 }
 
-# Deploy to Cloud Run
+# ── Cloud Run deploy ──────────────────────────────────────────
 deploy_cloud_run() {
     log_info "Deploying to Cloud Run..."
-    
-    IMAGE_TAG=$(cat .image_tag)
-    
-    # Create service account if not exists
-    gcloud iam service-accounts describe $SERVICE_ACCOUNT@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com >/dev/null 2>&1 || {
-        log_info "Creating service account..."
-        gcloud iam service-accounts create $SERVICE_ACCOUNT \
-            --display-name="MikroTik Auth Service"
-    }
-    
-    # Deploy
-    gcloud run deploy $PROJECT_NAME \
-        --image $IMAGE_TAG \
+    GCP_PROJECT=$(gcloud config get-value project)
+    IMAGE_SHA=$(cat .image_tag)
+ 
+    # Create service account if missing
+    if ! gcloud iam service-accounts describe \
+        "${SERVICE_ACCOUNT}@${GCP_PROJECT}.iam.gserviceaccount.com" \
+        >/dev/null 2>&1; then
+        log_info "Creating service account ${SERVICE_ACCOUNT}..."
+        gcloud iam service-accounts create "$SERVICE_ACCOUNT" \
+            --display-name="AgentOS Service Account"
+    fi
+ 
+    gcloud run deploy "$PROJECT_NAME" \
+        --image "$IMAGE_SHA" \
         --platform managed \
-        --region $REGION \
-        --allow-unauthenticated \
-        --service-account $SERVICE_ACCOUNT@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com \
-        --set-env-vars="NODE_ENV=production" \
-        --set-env-vars="FIREBASE_DATABASE_URL=$FIREBASE_DATABASE_URL" \
-        --set-env-vars="MIKROTIK_HOST=$MIKROTIK_HOST" \
-        --set-env-vars="MIKROTIK_PASSWORD=$MIKROTIK_PASSWORD" \
-        --set-env-vars="MIKROTIK_REST_URL=$MIKROTIK_REST_URL" \
-        --set-env-vars="SERVER_URL=$SERVER_URL" \
-        --set-env-vars="ALLOWED_ORIGINS=$ALLOWED_ORIGINS" \
-        --set-env-vars="WEBHOOK_SECRET=$WEBHOOK_SECRET" \
-        --set-env-vars="GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID" \
-        --set-env-vars="GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET" \
-        --memory 512Mi \
+        --region "$REGION" \
+        --service-account "${SERVICE_ACCOUNT}@${GCP_PROJECT}.iam.gserviceaccount.com" \
+        --port "$PORT" \
+        --memory 1Gi \
         --cpu 1 \
         --concurrency 80 \
         --max-instances 10 \
         --min-instances 1 \
         --timeout 300 \
-        --port 3000
-    
-    log_info "Deployment complete!"
-    log_info "Service URL: $(gcloud run services describe $PROJECT_NAME --region $REGION --format 'value(status.url)')"
+        --set-env-vars="NODE_ENV=production" \
+        --set-env-vars="TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}" \
+        --set-env-vars="TELEGRAM_ALLOWED_CHAT_ID=${TELEGRAM_ALLOWED_CHAT_ID}" \
+        --set-env-vars="ROS_HOST=${ROS_HOST}" \
+        --set-env-vars="ROS_PORT=${ROS_PORT:-8728}" \
+        --set-env-vars="ROS_USER=${ROS_USER:-admin}" \
+        --set-env-vars="ROS_PASS=${ROS_PASS}" \
+        --set-env-vars="DATA_BACKEND=${DATA_BACKEND:-local}" \
+        --set-env-vars="LLM_PROVIDER=${LLM_PROVIDER:-gemini}" \
+        --set-env-vars="GEMINI_API_KEY=${GEMINI_API_KEY:-}" \
+        --set-env-vars="GATEWAY_PORT=${GATEWAY_PORT:-19876}"
+ 
+    SERVICE_URL=$(gcloud run services describe "$PROJECT_NAME" \
+        --region "$REGION" --format 'value(status.url)')
+    log_info "Deployed: ${SERVICE_URL}"
+    log_info "Health check: curl -H 'Authorization: Bearer \$(gcloud auth print-identity-token)' ${SERVICE_URL}/health"
 }
 
-# Setup Firebase
+
+# ── Firebase ──────────────────────────────────────────────────
 setup_firebase() {
-    log_info "Setting up Firebase..."
-    
-    # Enable Firestore
-    gcloud services enable firestore.googleapis.com
-    
-    # Create Firestore indexes
-    firebase deploy --only firestore:indexes || log_warn "Firestore indexes deployment skipped"
-    
-    # Deploy security rules
-    firebase deploy --only firestore:rules || log_warn "Firestore rules deployment skipped"
+    log_info "Deploying Firebase rules and indexes..."
+    command -v firebase >/dev/null 2>&1 || {
+        log_warn "firebase-tools not installed — skipping (npm install -g firebase-tools)"
+        return 0
+    }
+    firebase deploy --only firestore:indexes && log_info "Indexes deployed" \
+        || log_warn "Indexes deployment skipped"
+    firebase deploy --only firestore:rules && log_info "Rules deployed" \
+        || log_warn "Rules deployment skipped"
 }
 
-# Main deployment
+# ── Main ──────────────────────────────────────────────────────
+usage() {
+    echo "Usage: $0 [build|deploy|firebase|all]"
+    echo "  build    — build and push Docker image only"
+    echo "  deploy   — deploy to Cloud Run (requires prior build)"
+    echo "  firebase — deploy Firestore rules and indexes"
+    echo "  all      — run all steps (default)"
+}
+ 
 main() {
     check_prerequisites
     setup_environment
-    
+ 
     case "${1:-all}" in
-        build)
-            build_and_push
-            ;;
-        deploy)
-            deploy_cloud_run
-            ;;
-        firebase)
-            setup_firebase
-            ;;
+        build)    build_and_push ;;
+        deploy)   deploy_cloud_run ;;
+        firebase) setup_firebase ;;
         all)
             build_and_push
             deploy_cloud_run
             setup_firebase
             ;;
+        --help|-h) usage ;;
         *)
-            echo "Usage: $0 [build|deploy|firebase|all]"
+            log_error "Unknown command: $1"
+            usage
             exit 1
             ;;
     esac
-    
-    log_info "✅ Deployment completed successfully!"
+ 
+    log_info "✅ Done."
 }
-
+ 
 main "$@"
-
-# Build and deploy to Google Cloud Run
-gcloud builds submit --tag gcr.io/PROJECT_ID/firebase-mikrotik-auth
-
-gcloud run deploy firebase-mikrotik-auth \
-  --image gcr.io/PROJECT_ID/firebase-mikrotik-auth \
-  --platform managed \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --set-env-vars="FIREBASE_DATABASE_URL=https://your-project.firebaseio.com" \
-  --set-env-vars="MIKROTIK_API_URL=https://your-router-ip/rest"
+ 
