@@ -1,0 +1,44 @@
+// skills/tts/skill.json
+{
+  "name": "tts",
+  "version": "1.0.0",
+  "description": "Text-to-speech synthesis with multiple providers",
+  "domain": "audio",
+  "entry": "index.js",
+  "permissions": ["audio:synthesize"],
+  "parameters": {
+    "action": {
+      "type": "string",
+      "enum": ["synthesize", "stream", "voices"],
+      "required": true
+    },
+    "provider": {
+      "type": "string",
+      "enum": ["openai", "elevenlabs", "google", "local", "edge"],
+      "default": "edge"
+    },
+    "text": {
+      "type": "string",
+      "description": "Text to synthesize"
+    },
+    "voice": {
+      "type": "string",
+      "description": "Voice ID or name"
+    },
+    "speed": {
+      "type": "number",
+      "default": 1.0,
+      "description": "Speech speed multiplier"
+    },
+    "format": {
+      "type": "string",
+      "enum": ["mp3", "wav", "ogg", "opus"],
+      "default": "mp3"
+    },
+    "language": {
+      "type": "string",
+      "default": "en"
+    }
+  }
+}
+
