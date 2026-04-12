@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+agentos:
   app:
     build:
       context: .
@@ -13,6 +14,8 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - LOG_LEVEL=info
+       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - FIREBASE_SERVICE_ACCOUNT_PATH=/app/config/serviceAccountKey.json
       - FIREBASE_DATABASE_URL=${FIREBASE_DATABASE_URL}
       - MIKROTIK_HOST=${MIKROTIK_HOST}
@@ -24,8 +27,10 @@ services:
       - WEBHOOK_SECRET=${WEBHOOK_SECRET}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-    volumes:
-      - ./serviceAccountKey.json:/app/config/serviceAccountKey.json:ro
+   volumes:
+      - ./skills:/app/skills
+      - ./config:/app/config
+      - ./data:/app/data
       - ./logs:/app/logs
     networks:
       - mikrotik-network
@@ -63,8 +68,19 @@ services:
     networks:
       - mikrotik-network
 
+        postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: agentos
+      POSTGRES_USER: agentos
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+
 volumes:
   redis-data:
+  postgres_data:
 
 
 networks:
