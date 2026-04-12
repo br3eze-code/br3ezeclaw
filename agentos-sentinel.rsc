@@ -25,7 +25,7 @@
 :local errorCount 0
 :local lastError ""
 :local scriptVersion "2026.6.2"
-:local commandTimestamps [:toarray ""]
+:local commandTimestamps {}
 :local sessionCache [:toarray ""]
 :local connectionHealth 100
 
@@ -979,7 +979,14 @@
                 :if ($profile = "30day" || $profile = "30d") do={:set profileName "30day"}
             }
             
-            :local randomHash [:pick [:md5 ([/system clock get time] . [/system resource get free-memory])] 0 10]
+           :local _t  [/system clock get time]
+:local _m  [/system resource get free-memory]
+:local _u  [/system resource get uptime]
+:local randomHash [:pick ($t . $m . $u) 0 10]
+# For extra uniqueness strip colons/spaces
+:set randomHash [:replace $randomHash ":" ""]
+:set randomHash [:replace $randomHash " " ""]
+:set randomHash [:pick $randomHash 0 10]
             :local code ("PC-" . [:upper $profileName] . "-" . $randomHash)
             
             :do {
