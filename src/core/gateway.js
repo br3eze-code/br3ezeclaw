@@ -1,125 +1,112 @@
+'use strict';
+/**
+ * AgentOS Gateway
+ * @module core/gateway
+ * @version 2026.04 
+ */
+
 const http = require('http');
-const fs = require('fs');
+const fs   = require('fs');
 const path = require('path');
 
-app.use('/v1', v1Routes);
-app.use('/v2', v2Routes);
-
-// Version in WebSocket protocol
-const wss = new WebSocket.Server({
-  server,
-  path: '/ws/v1'
-});
-
-const { createApp } = require('./server');
-const { WebSocketGateway } = require('./websocket');
-const { AgentOSBot } = require('./telegram');
-const { getMikroTikClient } = require('./mikrotik');
+const { createApp }             = require('./server');
+const { WebSocketGateway }      = require('./websocket');
+const { AgentOSBot }            = require('./telegram');
+const { getMikroTikClient }     = require('./mikrotik');
+const { getAgentRuntime }       = require('./agentRuntime');
 const { getConfig, STATE_PATH } = require('./config');
-const { logger } = require('./logger');
+const { logger }                = require('./logger');
+const { PermissionMode }        = require('./permissions');
 
 class Gateway {
     constructor(options = {}) {
-        this.config = getConfig();
-        this.options = options;
-        this.server = null;
-        this.wss = null;
-        this.bot = null;
-        this.pidFile = path.join(STATE_PATH, 'gateway.pid');
+        this.config        = getConfig();
+        this.options       = options;
+        this.server        = null;
+        this.wss           = null;
+        this.bot           = null;
+        this.runtime       = null;
+        this.pidFile       = path.join(STATE_PATH, 'gateway.pid');
+        this._shuttingDown = false;
     }
 
     async start() {
-        const port = this.options.port || this.config.gateway.port || 19876;
-        const host = this.config.gateway.host || '127.0.0.1';
+        const port = this.options.port || this.config.gateway?.port || 19876;
+        const host = this.config.gateway?.host || '127.0.0.1';
 
         logger.info(`Starting AgentOS Gateway v${this.config.version}...`);
 
-        // Connect to MikroTik
-        logger.info('Connecting to MikroTik...');
-        await getMikroTikClient();
+        // ── Bootstrap AgentRuntime ──
+        this.runtime = getAgentRuntime({
+            permissionMode:    this.config.agent?.permissionMode || PermissionMode.PROMPT,
+            maxTurns:          this.config.agent?.maxTurns       || 8,
+            maxBudgetTokens:   this.config.agent?.maxBudgetTokens || 4000,
+            compactAfterTurns: this.config.agent?.compactAfterTurns || 12
+        });
+        logger.info(`AgentRuntime ready — mode: ${this.runtime.defaultConfig.permissionMode}, maxTurns: ${this.runtime.defaultConfig.maxTurns}`);
 
-        // Create HTTP server
-        const app = createApp();
+        // ── Connect MikroTik ──
+        logger.info('Connecting to MikroTik...');
+        try {
+            await getMikroTikClient().connect();
+        } catch (err) {
+            logger.warn(`MikroTik offline at startup: ${err.message} — gateway still starting`);
+        }
+
+        // ── HTTP server ──
+        const app   = createApp();
         this.server = http.createServer(app);
 
-        // Initialize WebSocket
+        // ── WebSocket ──
         this.wss = new WebSocketGateway(this.server);
 
-        // Initialize Telegram bot if configured
-        if (this.config.telegram.token) {
+        // ── Telegram bot ──
+        if (this.config.telegram?.token) {
             logger.info('Starting Telegram bot...');
             this.bot = new AgentOSBot();
         }
 
-        // Start listening
         await new Promise((resolve, reject) => {
-            this.server.listen(port, host, (err) => {
-                if (err) reject(err);
-                else resolve();
-            });
+            this.server.listen(port, host, (err) => { if (err) reject(err); else resolve(); });
         });
 
-        // Save PID
-        fs.writeFileSync(this.pidFile, process.pid.toString());
+        fs.writeFileSync(this.pidFile, String(process.pid));
 
-        logger.info(`Gateway running on ${host}:${port}`);
-        logger.info(`WebSocket: ws://${host}:${port}/ws`);
-        logger.info(`HTTP API: http://${host}:${port}/health`);
+        logger.info(`✅ Gateway running on ${host}:${port}`);
+        logger.info(`   WebSocket    : ws://${host}:${port}/ws`);
+        logger.info(`   HTTP API     : http://${host}:${port}/health`);
+        logger.info(`   Permission   : ${this.runtime.defaultConfig.permissionMode}`);
 
-        // Setup graceful shutdown
-        this.setupShutdownHandlers();
-
+        this._registerSignalHandlers();
         return this;
     }
 
-    setupShutdownHandlers() {
-        const shutdown = async (signal) => {
-            logger.info(`${signal} received, shutting down...`);
-
-            if (this.bot) this.bot.stop();
-            if (this.wss) this.wss.close();
-
-            await new Promise((resolve) => {
-                this.server.close(resolve);
-            });
-
-            // Remove PID file
-            if (fs.existsSync(this.pidFile)) {
-                fs.unlinkSync(this.pidFile);
-            }
-
-            logger.info('Gateway stopped');
-            process.exit(0);
-        };
-
-        process.on('SIGTERM', () => shutdown('SIGTERM'));
-        process.on('SIGINT', () => shutdown('SIGINT'));
-        process.on('uncaughtException', (err) => {
-            logger.error('Uncaught Exception:', err);
-            shutdown('ERROR');
-        });
+    async stop() {
+        if (this.bot)    this.bot.stop();
+        if (this.wss)    this.wss.close();
+        if (this.server) await new Promise(resolve => this.server.close(resolve));
+        if (fs.existsSync(this.pidFile)) fs.unlinkSync(this.pidFile);
     }
 
-    async stop() {
-        if (this.bot) this.bot.stop();
-        if (this.wss) this.wss.close();
-        if (this.server) {
-            await new Promise((resolve) => this.server.close(resolve));
-        }
-        if (fs.existsSync(this.pidFile)) {
-            fs.unlinkSync(this.pidFile);
-        }
+    async shutdown(signal) {
+        if (this._shuttingDown) return;
+        this._shuttingDown = true;
+        logger.info(`${signal} received — shutting down...`);
+        const forceTimer = setTimeout(() => { logger.error('Forced shutdown'); process.exit(1); }, 10_000);
+        forceTimer.unref();
+        try { await this.stop(); logger.info('Gateway stopped cleanly'); }
+        catch (err) { logger.error('Shutdown error:', err.message); }
+        finally { clearTimeout(forceTimer); process.exit(signal === 'ERROR' ? 1 : 0); }
+    }
+
+    _registerSignalHandlers() {
+        process.once('SIGTERM',          () => this.shutdown('SIGTERM'));
+        process.once('SIGINT',           () => this.shutdown('SIGINT'));
+        process.on('uncaughtException',  (err) => { logger.error('Uncaught Exception:', err); this.shutdown('ERROR'); });
+        process.on('unhandledRejection', (r)   => { logger.error('Unhandled Rejection:', r);  this.shutdown('ERROR'); });
     }
 }
-async shutdown(signal) {
-  logger.info(`${signal} received, shutting down...`);
-  
-  const forceExit = setTimeout(() => {
-    logger.error('Forced shutdown due to timeout');
-    process.exit(1);
-  }, 10000); // 10s timeout
-  
-// Factory function for CLI
+
 async function startGateway(options = {}) {
     const gateway = new Gateway(options);
     await gateway.start();
