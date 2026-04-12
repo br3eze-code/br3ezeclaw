@@ -448,14 +448,47 @@ class MikroTikManager extends EventEmitter {
             if (cached) return cached;
         }
  
-        const stats = await this.state.conn.menu('/system/resource').get();
-        const result = stats[0] || null;
-  if (result) {
-    result['cpu-load'] = result['cpu-load'] || result['cpu-load'] || result.cpu || '0';
+          try {
+    const stats = await this.state.conn.menu('/system/resource').get();
+    const raw = stats[0] || {};
+              
+ // Normalize RouterOS property names (different versions use different keys)
+    const normalized = {
+      // CPU metrics
+      'cpu-load': raw['cpu-load'] || raw['cpu-load'] || raw['cpu-usage'] || raw['cpu'] || '0',
+      'cpu-count': raw['cpu-count'] || raw['cpu-count'] || '1',
+      'cpu-frequency': raw['cpu-frequency'] || raw['cpu-frequency'] || '0',
+      
+      // Memory metrics
+      'free-memory': raw['free-memory'] || raw['free-memory'] || '0',
+      'total-memory': raw['total-memory'] || raw['total-memory'] || '0',
+      'used-memory': raw['used-memory'] || (parseInt(raw['total-memory'] || 0) - parseInt(raw['free-memory'] || 0)).toString(),
+      
+      // Storage
+      'free-hdd-space': raw['free-hdd-space'] || raw['free-hdd-space'] || '0',
+      'total-hdd-space': raw['total-hdd-space'] || raw['total-hdd-space'] || '0',
+      
+      // System info
+      'uptime': raw['uptime'] || 'unknown',
+      'version': raw['version'] || 'unknown',
+      'board-name': raw['board-name'] || raw['board-name'] || 'MikroTik',
+      'architecture-name': raw['architecture-name'] || raw['architecture-name'] || 'unknown',
+      
+      // Raw access for compatibility
+      ...raw
+    };
+    
+    // Calculate memory usage percentage
+    const totalMem = parseInt(normalized['total-memory']) || 1;
+    const freeMem = parseInt(normalized['free-memory']) || 0;
+    normalized['memory-usage-percent'] = Math.round(((totalMem - freeMem) / totalMem) * 100).toString();
+
+    this.cache.set(cacheKey, normalized);
+    return normalized;
+  } catch (error) {
+    logger.error('Failed to get system stats:', error.message);
+    throw new ToolExecutionError('system.stats', `Failed to fetch stats: ${error.message}`, error);
   }
-  
-    if (result) this.cache.set(cacheKey, result);
-  return result;
 }
    async getLogs(lines = 10) {
         this._ensureConnected();
