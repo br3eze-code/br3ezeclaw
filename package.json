@@ -17,8 +17,16 @@
     "format":      "prettier --write \"src/**/*.js\"",
     "build":       "tsc --project tsconfig.json",
     "build:check": "tsc --noEmit",
+    "postinstall": "node scripts/postinstall.js",
+    "preuninstall": "node scripts/preuninstall.js",
     "clean":       "rm -rf dist"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
   "keywords": [
     "mikrotik",
     "firebase",
