@@ -1,6 +1,6 @@
 
 
- * Google Gemini Provider
+ /* Google Gemini Provider
  */
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
