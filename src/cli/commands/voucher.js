@@ -40,8 +40,7 @@ module.exports = (program) => {
                 const vouchers = [];
 
                 for (let i = 0; i < parseInt(options.qty); i++) {
-                    const code = `AGENT-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-
+                    const code = `AGENT-${require('crypto').randomBytes(3).toString('hex').toUpperCase()}`;
                     await db.createVoucher(code, {
                         plan: selectedPlan,
                         duration: options.duration,
