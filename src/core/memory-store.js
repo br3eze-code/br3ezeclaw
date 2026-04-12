@@ -165,9 +165,4 @@ class MemoryStore {
 }
 
 module.exports = { MemoryStore };
-'''
 
-with open(f"{base_path}/src/core/memory-store.js", "w") as f:
-    f.write(memory_store_js)
-
-print("✓ src/core/memory-store.js")
