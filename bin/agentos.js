@@ -70,6 +70,14 @@ program
     .option('--log-level <level>', 'Global log level (silent|fatal|error|warn|info|debug|trace)', 'info')
     .option('--no-color', 'Disable ANSI colors')
     .option('--json', 'Output JSON for programmatic use')
+    .command('completion')
+  .description('Generate shell completion script')
+  .action(() => {
+    const completionScript = fs.readFileSync(
+      path.join(__dirname, '../scripts/completion.sh'), 
+      'utf8'
+    );
+    console.log(completionScript);
     .configureOutput({
         writeErr: (str) => process.stdout.write(str),
         getOutHelpWidth: () => 100,
