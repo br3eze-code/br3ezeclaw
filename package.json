@@ -4,10 +4,12 @@
   "description": "AgentOS — Network Intelligence Operating System",
   "main": "src/core/gateway.js",
   "bin": {
-    "agentos": "./bin/agentos.js"
+    "agentos": "./bin/agentos.js",
+    "agentos-esm": "./agentos.mjs"
   },
   "scripts": {
     "start":       "node bin/agentos.js",
+    "start:modern": "node agentos.mjs",
     "dev":         "nodemon bin/agentos.js --dev",
     "test":        "jest",
     "lint":        "eslint .",
