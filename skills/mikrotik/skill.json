@@ -1,0 +1,24 @@
+{
+  "name": "mikrotik.users",
+  "version": "1.0.0",
+  "description": "Manage MikroTik Hotspot users",
+  "author": "br3eze-code",
+  "parameters": {
+    "action": {
+      "type": "string",
+      "enum": ["list", "kick", "add", "remove"],
+      "required": true
+    },
+    "username": {
+      "type": "string",
+      "required": false
+    },
+    "router": {
+      "type": "string",
+      "required": true,
+      "description": "Router node ID"
+    }
+  },
+  "permissions": ["router:read", "router:write"],
+  "tags": ["network", "hotspot", "users"]
+}
