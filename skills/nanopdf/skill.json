@@ -1,0 +1,39 @@
+// skills/nanopdf/skill.json
+{
+  "name": "nanopdf",
+  "version": "1.0.0",
+  "description": "Lightweight PDF generation and manipulation",
+  "domain": "document",
+  "entry": "index.js",
+  "permissions": ["document:create", "document:read"],
+  "parameters": {
+    "action": {
+      "type": "string",
+      "enum": ["create", "merge", "split", "extract", "convert", "fill", "sign", "compress"],
+      "required": true
+    },
+    "template": {
+      "type": "string",
+      "description": "Template ID or HTML content"
+    },
+    "data": {
+      "type": "object",
+      "description": "Data to render in template"
+    },
+    "files": {
+      "type": "array",
+      "description": "Input PDF files for merge/split operations"
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "pageSize": { "type": "string", "enum": ["A4", "Letter", "Legal"], "default": "A4" },
+        "orientation": { "type": "string", "enum": ["portrait", "landscape"], "default": "portrait" },
+        "margins": { "type": "object" },
+        "header": { "type": "string" },
+        "footer": { "type": "string" },
+        "watermark": { "type": "string" }
+      }
+    }
+  }
+}
