@@ -2,7 +2,7 @@
 /**
  * AgentOS Telegram Bot
  * @module core/telegram
- * @version 2026.04 — claw-code integration
+ * @version 2026.04 
  *
  */
 
