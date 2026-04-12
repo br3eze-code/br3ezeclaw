@@ -1,4 +1,4 @@
-// src/dashboard/MissionControl.js
+// src/dashboard/missionControl.js
 class MissionControl {
   constructor(kernel) {
     this.kernel = kernel;
