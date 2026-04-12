@@ -1,0 +1,26 @@
+name: mikrotik
+version: 1.0.0
+description: MikroTik RouterOS management
+author: br3eze
+tools:
+  - name: user.kick
+    description: Disconnect a hotspot user
+    parameters:
+      - name: user
+        type: string
+        required: true
+    returns: boolean
+  - name: system.reboot
+    description: Reboot the router
+    parameters: []
+    returns: boolean
+config:
+  - name: router.host
+    type: string
+    default: 192.168.88.1
+  - name: router.username
+    type: string
+    required: true
+  - name: router.password
+    type: string
+    secret: true
