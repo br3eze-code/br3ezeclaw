@@ -7,8 +7,8 @@ describe('MikroTikManager', () => {
   beforeEach(() => {
     manager = new MikroTikManager({
       host: '192.168.88.1',
-      user: 'admin',
-      password: 'test',
+      user: process.env.MIKROTIK_USER || '',
+      password: process.env.MIKROTIK_PASS || '',
       port: 8728
     });
   });
