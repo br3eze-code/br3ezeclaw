@@ -1,8 +1,9 @@
+// skills/mikrotik/skill.json 
 {
   "name": "mikrotik.users",
   "version": "1.0.0",
   "description": "Manage MikroTik Hotspot users",
-  "author": "br3eze-code",
+ "domain": "networking",
   "parameters": {
     "action": {
       "type": "string",
