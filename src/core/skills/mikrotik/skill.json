@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Manage MikroTik Hotspot users",
   "author": "br3eze-code",
+  "entry": "index.js",
   "parameters": {
     "action": {
       "type": "string",
