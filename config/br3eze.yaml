@@ -1,0 +1,76 @@
+# config/br3eze.yaml
+runtime:
+  llm:
+    provider: gemini
+    model: gemini-2.5-flash
+    temperature: 0.2
+  
+  domains:
+    - network
+    - compute
+    - developer
+    - security
+
+policy:
+  default: allow
+  rules:
+    - id: protect-production
+      match:
+        domain: compute
+        params:
+          environment: production
+      action: approve
+      reason: "Production changes require approval"
+      
+    - id: firewall-lockdown
+      match:
+        domain: network
+        tool: firewall
+        action: delete
+      action: approve
+      reason: "Firewall rule deletion requires security review"
+      
+    - id: code-to-prod
+      match:
+        domain: developer
+        tool: deploy
+        params:
+          target: production
+      action: approve
+      approvers: ['tech-lead', 'devops']
+      requires:
+        - tests: passing
+        - coverage: ">80%"
+        - securityScan: clean
+
+channels:
+  telegram:
+    enabled: true
+    token: ${TELEGRAM_TOKEN}
+    
+  whatsapp:
+    enabled: true
+    session: ${WHATSAPP_SESSION}
+    
+  vscode:
+    enabled: true
+    port: 9876
+    
+  github:
+    enabled: true
+    appId: ${GITHUB_APP_ID}
+    privateKey: ${GITHUB_PRIVATE_KEY}
+
+integrations:
+  firebase:
+    projectId: ${FIREBASE_PROJECT}
+    
+  terraform:
+    enabled: true
+    backend: s3
+    
+  docker:
+    registry: ghcr.io
+    
+  kubernetes:
+    configPath: ~/.kube/config
