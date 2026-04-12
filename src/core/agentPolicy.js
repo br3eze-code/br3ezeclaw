@@ -1,7 +1,53 @@
+// src/core/agentPolicy.js 
 'use strict';
 /**
  * AgentPolicy — 5-dimension policy system
  */
+class AgentPolicy {
+  constructor(config) {
+    this.rules = new PolicyEngine();
+    
+    // Network-specific policies
+    this.rules.add('network', {
+      'firewall.change': { approval: 'required', notify: ['admin'] },
+      'user.kick': { approval: 'auto', rateLimit: '10/min' },
+      'voucher.create': { approval: 'auto', maxValue: 100 }
+    });
+    
+    // Developer-specific policies
+    this.rules.add('developer', {
+      'codegen.production': { approval: 'required', review: true },
+      'deploy.production': { approval: 'required', tests: 'passing' },
+      'git.push.main': { approval: 'required', checks: ['ci-passed'] },
+      'infra.provision': { approval: 'required', budget: 500 }
+    });
+    
+    // Cross-domain policies
+    this.rules.add('cross-domain', {
+      'deploy+firewall': { 
+        autoApprove: true, // If deploy succeeds, firewall changes auto-approve
+        rollbackOnFailure: true
+      }
+    });
+  }
+  
+  evaluate(action, context) {
+    const domain = action.domain;
+    const policy = this.rules.get(domain, action.type);
+    
+    // Check cross-domain implications
+    if (context.recentActions.length > 0) {
+      const crossPolicy = this.rules.getCrossDomain(
+        context.recentActions[context.recentActions.length - 1],
+        action
+      );
+      if (crossPolicy) return crossPolicy;
+    }
+    
+    return policy;
+  }
+}
+
 // ── Enum values ──────────────────────────────────
 
 const AgentPreset = Object.freeze({
