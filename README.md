@@ -267,14 +267,16 @@ agentos
 ├── --dev                Development profile
 └── --profile <name>     Named profile
 ```
-📚 Documentation
-| Topic                | Link                                 |
-| -------------------- | ------------------------------------ |
-| Installation Guide   | [docs/install.md](docs/install.md)   |
-| Telegram Bot Setup   | [docs/telegram.md](docs/telegram.md) |
-| WhatsApp Integration | [docs/whatsapp.md](docs/whatsapp.md) |
-| API Reference        | [docs/api.md](docs/api.md)           |
-| Contributing         | [CONTRIBUTING.md](CONTRIBUTING.md)   |
+## 📖 Full Documentation
+
+- [Installation Guide](docs/install.md)
+- [Telegram Setup](docs/telegram.md)
+- [WhatsApp Setup](docs/whatsapp.md)
+- [API Reference](docs/api.md)
+- [Available Skills](SKILL.md)
+- [Project Specification](SPEC.md)
+- [Getting Started](START_HERE.md)
+- [Contributing](CONTRIBUTING.md)
 
 🛠️ Tech Stack
 | Layer          | Technology                                      |
