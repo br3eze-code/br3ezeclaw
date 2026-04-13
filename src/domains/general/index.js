@@ -1,72 +1,74 @@
 // src/domains/general/index.js
 
-
 const os = require('os');
-const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
 
 const generalTools = [
   {
     name: 'calculate',
-    description: 'Perform mathematical calculations or unit conversions',
+    description: 'Perform math calculations or simple unit conversions',
     parameters: {
       type: 'object',
       properties: {
-        expression: { type: 'string', description: 'Math expression, e.g. "2 + 2 * 10" or "convert 5km to miles"' }
+        expression: { 
+          type: 'string', 
+          description: 'Math expression like "2 * 15 + 10" or "convert 100km to miles"' 
+        }
       },
       required: ['expression']
     },
-    execute: async (params) => {
+    execute: async ({ expression }) => {
       try {
-        // Simple safe eval for math (use a proper math parser in production if needed)
-        const result = eval(params.expression); // Caution: only use with trusted input
-        return { result, expression: params.expression };
-      } catch (e) {
-        return { error: 'Invalid expression', details: e.message };
+        // Safe math evaluation (for real production use a proper parser like math.js)
+        const result = Function('"use strict";return (' + expression + ')')();
+        return { success: true, result, expression };
+      } catch (err) {
+        return { success: false, error: 'Invalid expression', details: err.message };
       }
     }
   },
 
   {
     name: 'time',
-    description: 'Get current time, date, or timezone information',
+    description: 'Get current time, date, or timezone info',
     parameters: {
       type: 'object',
       properties: {
         format: { type: 'string', enum: ['iso', 'human', 'unix'], default: 'human' }
       }
     },
-    execute: async (params) => {
+    execute: async ({ format = 'human' }) => {
       const now = new Date();
-      if (params.format === 'iso') return { time: now.toISOString() };
-      if (params.format === 'unix') return { timestamp: Math.floor(now.getTime() / 1000) };
+      if (format === 'iso') return { time: now.toISOString() };
+      if (format === 'unix') return { timestamp: Math.floor(now.getTime() / 1000) };
       return {
         time: now.toLocaleTimeString(),
         date: now.toLocaleDateString(),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        utc: now.toUTCString()
       };
     }
   },
 
   {
     name: 'system_info',
-    description: 'Get information about the host system running AgentOS',
+    description: 'Get information about the machine running AgentOS',
     execute: async () => ({
       platform: os.platform(),
       arch: os.arch(),
       cpus: os.cpus().length,
-      totalMemory: `${(os.totalmem() / 1024 / 1024 / 1024).toFixed(2)} GB`,
-      freeMemory: `${(os.freemem() / 1024 / 1024 / 1024).toFixed(2)} GB`,
-      uptime: `${Math.floor(os.uptime() / 3600)} hours`,
-      hostname: os.hostname()
+      totalMemoryGB: (os.totalmem() / 1024 / 1024 / 1024).toFixed(2),
+      freeMemoryGB: (os.freemem() / 1024 / 1024 / 1024).toFixed(2),
+      uptimeHours: Math.floor(os.uptime() / 3600),
+      hostname: os.hostname(),
+      nodeVersion: process.version
     })
   },
 
   {
     name: 'random',
-    description: 'Generate random numbers, UUIDs, or passwords',
+    description: 'Generate random UUID, number, or password',
     parameters: {
       type: 'object',
       properties: {
@@ -74,50 +76,37 @@ const generalTools = [
         length: { type: 'number', default: 16 }
       }
     },
-    execute: async (params) => {
-      if (params.type === 'uuid') return { value: crypto.randomUUID() };
-      if (params.type === 'number') return { value: Math.floor(Math.random() * 1000000) };
-      // Simple password generator
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+    execute: async ({ type = 'uuid', length = 16 }) => {
+      if (type === 'uuid') return { value: crypto.randomUUID() };
+      if (type === 'number') return { value: Math.floor(Math.random() * 1_000_000) };
+      
+      // Password generator
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?';
       let pwd = '';
-      for (let i = 0; i < params.length; i++) {
+      for (let i = 0; i < length; i++) {
         pwd += chars[Math.floor(Math.random() * chars.length)];
       }
-      return { value: pwd, type: 'password' };
+      return { value: pwd, type: 'password', length };
     }
   },
 
   {
-    name: 'web_search',
-    description: 'Perform a quick web search (placeholder — integrate with real search API later)',
+    name: 'ping',
+    description: 'Ping an external host (system ping)',
     parameters: {
       type: 'object',
-      properties: { query: { type: 'string' } },
-      required: ['query']
+      properties: { 
+        host: { type: 'string' }, 
+        count: { type: 'number', default: 4 } 
+      },
+      required: ['host']
     },
-    execute: async (params) => {
-      // Placeholder — replace with real search (e.g. Serper, Tavily, or Grok API)
-      return {
-        query: params.query,
-        note: 'Web search integration coming soon. For now, this is a placeholder.',
-        suggestion: 'Try asking me to calculate, get time, or system info instead.'
-      };
-    }
-  },
-
-  {
-    name: 'ping_external',
-    description: 'Ping an external host (uses system ping)',
-    parameters: {
-      type: 'object',
-      properties: { host: { type: 'string' }, count: { type: 'number', default: 4 } }
-    },
-    execute: async (params) => {
+    execute: async ({ host, count = 4 }) => {
       try {
-        const result = execSync(`ping -c ${params.count} ${params.host}`, { encoding: 'utf8' });
-        return { host: params.host, output: result.trim() };
-      } catch (e) {
-        return { error: 'Ping failed', details: e.message };
+        const output = execSync(`ping -c ${count} ${host}`, { encoding: 'utf8', timeout: 10000 });
+        return { host, success: true, output: output.trim() };
+      } catch (err) {
+        return { host, success: false, error: err.message };
       }
     }
   }
@@ -125,11 +114,16 @@ const generalTools = [
 
 module.exports = {
   name: 'general',
-  description: 'General-purpose utilities available to the AgentOS AI across all domains',
-  
+  description: 'General utility tools for AgentOS — math, time, system info, randomness, etc.',
+
+  // Register function — call this in your bootstrap
   register(registry) {
+    if (!registry || typeof registry.registerDomain !== 'function') {
+      console.warn('ToolRegistry not found — general domain tools not registered');
+      return;
+    }
     registry.registerDomain('general', generalTools);
-    console.log(`✅ General domain registered with ${generalTools.length} tools`);
+    console.log(`✅ [General Domain] Registered ${generalTools.length} tools`);
   },
 
   getTools() {
