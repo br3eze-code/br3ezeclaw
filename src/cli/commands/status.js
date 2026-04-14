@@ -1,5 +1,5 @@
 // ==========================================
-// AGENTOS STATUS COMMAND
+// AGENTOS STATUS COMMAND - FIXED
 // Quick system overview with proper error handling
 // ==========================================
 
@@ -66,14 +66,15 @@ module.exports = (program) => {
 
         // MikroTik status with spinner
         const spinner = ora('Connecting to router...').start();
+        let mikrotik;
         try {
           const { getMikroTikClient } = require('../../core/mikrotik');
-          const mikrotik = await getMikroTikClient();
+          mikrotik = await getMikroTikClient();
           const stats = await mikrotik.getSystemStats();
           
           spinner.stop();
           
-          // FIXED: Properly access normalized stats
+          // Properly access normalized stats
           const cpuLoad = stats['cpu-load'] || '0';
           const uptime = stats['uptime'] || 'unknown';
           const version = stats['version'] || 'unknown';
@@ -94,6 +95,8 @@ module.exports = (program) => {
             error: e.message,
             color: 'red'
           };
+        } finally {
+          if (mikrotik) await mikrotik.disconnect();
         }
 
         // Output
