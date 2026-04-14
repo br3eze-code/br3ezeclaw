@@ -3,8 +3,10 @@
 // Run, manage, and query the WebSocket gateway
 // ==========================================
 
-const chalk = require('chalk');
-const ora = require('ora');
+const _chalk = require('chalk');
+const chalk  = _chalk.default || _chalk;
+const _ora = require('ora');
+const ora = _ora.default || _ora;
 const fs = require('fs');
 const path = require('path');
 const { spawn, exec } = require('child_process');
