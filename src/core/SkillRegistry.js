@@ -1,5 +1,6 @@
 // src/core/SkillRegistry.js
-const fs = require('fs').promises;
+const fs   = require('fs').promises;
+const fss  = require('fs');            // sync checks
 const path = require('path');
 const EventEmitter = require('events');
 
@@ -37,38 +38,79 @@ class SkillRegistry extends EventEmitter {
   }
 
   async loadSkill(skillPath) {
-    const manifestPath = path.join(skillPath, 'skill.json');
-    
     try {
-      // Load and validate manifest
-      const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+      // ── 1. Load manifest (skill.json preferred, manifest.yaml fallback) ────
+      let manifest;
+      const jsonManifest  = path.join(skillPath, 'skill.json');
+      const yamlManifest  = path.join(skillPath, 'manifest.yaml');
+      const yamlManifest2 = path.join(skillPath, 'manifest.yml');
+
+      if (fss.existsSync(jsonManifest)) {
+        manifest = JSON.parse(await fs.readFile(jsonManifest, 'utf8'));
+      } else if (fss.existsSync(yamlManifest) || fss.existsSync(yamlManifest2)) {
+        const file = fss.existsSync(yamlManifest) ? yamlManifest : yamlManifest2;
+        // Parse minimal YAML without an external dep (name/version/description lines)
+        const raw = await fs.readFile(file, 'utf8');
+        manifest = this._parseSimpleYaml(raw);
+      } else {
+        throw new Error('No skill.json or manifest.yaml found');
+      }
+
       this.validateManifest(manifest);
-      
-      // Load implementation
-      const implPath = path.join(skillPath, manifest.entry || 'index.js');
-      const implementation = require(implPath);
-      
-      // Create skill wrapper
+
+      // ── 2. Load implementation (index.js or entry from manifest) ───────────
+      const entry = manifest.entry || 'index.js';
+      const implPath = path.join(skillPath, entry);
+
+      let impl;
+      if (fss.existsSync(implPath)) {
+        impl = require(implPath);
+      } else {
+        // Stub implementation — skill is metadata-only
+        impl = {};
+      }
+
+      // ── 3. Normalise to { execute, initialize, destroy, validate } ─────────
+      // Handles: plain object exports, class instances, or factories
+      const mod = (typeof impl === 'function' && impl.prototype?.execute)
+        ? new impl()  // class
+        : impl;
+
       const skill = {
         manifest,
-        execute: this.wrapExecution(implementation.execute.bind(implementation)),
-        validate: implementation.validate || this.defaultValidate,
-        initialize: implementation.initialize || (() => Promise.resolve()),
-        destroy: implementation.destroy || (() => Promise.resolve()),
+        execute:    this.wrapExecution(
+                      (mod.execute || (() => ({ status: 'no-op', skill: manifest.name }))).bind(mod)
+                    ),
+        validate:   mod.validate    || this.defaultValidate,
+        initialize: mod.initialize  || (() => Promise.resolve()),
+        destroy:    mod.destroy     || (() => Promise.resolve()),
         path: skillPath
       };
 
-      // Initialize skill
       await skill.initialize(this.config);
-      
       this.skills.set(manifest.name, skill);
       this.emit('skillLoaded', manifest.name);
-      
+
     } catch (error) {
-      console.error(`Failed to load skill from ${skillPath}:`, error.message);
+      console.error(`Failed to load skill from ${path.basename(skillPath)}:`, error.message);
       this.emit('skillError', { path: skillPath, error });
     }
   }
+
+  /** Tiny YAML scalar parser — handles top-level string/number fields only */
+  _parseSimpleYaml(raw) {
+    const result = {};
+    for (const line of raw.split('\n')) {
+      const m = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.+)$/);
+      if (m) {
+        const [, key, val] = m;
+        const trimmed = val.trim().replace(/^['"]|['"]$/g, '');
+        result[key] = isNaN(trimmed) ? trimmed : Number(trimmed);
+      }
+    }
+    return result;
+  }
+
 
   validateManifest(manifest) {
     const required = ['name', 'version', 'description'];
