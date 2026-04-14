@@ -37,6 +37,9 @@ const App = {
             // Connect to server
             await this.connectToServer();
 
+            // Initialize WhatsApp
+            this.initWhatsApp();
+
             // Load initial data
             await this.refreshDashboard();
 
@@ -135,6 +138,11 @@ const App = {
             this.handleBroadcast(data);
         });
 
+        wsClient.on('qr', (data) => {
+            console.log('[App] Received WhatsApp QR');
+            UI.showWhatsAppQR(data.qr);
+        });
+
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
@@ -143,11 +151,25 @@ const App = {
         });
     },
 
+    initWhatsApp() {
+        console.log('[App] WhatsApp initialized');
+        // Initial status check could be added here
+    },
+
+    initiateWhatsAppLogin() {
+        UI.info('Initializing WhatsApp connection...');
+        wsClient.send('initiate-whatsapp', { timestamp: Date.now() });
+    },
+
     handleBroadcast(data) {
         if (data.type === 'router:status') {
             this.refreshDashboard();
         } else if (data.type === 'voucher:created') {
             this.refreshVouchers();
+        } else if (data.type === 'channel-status') {
+            if (data.payload.channel === 'whatsapp') {
+                UI.updateWhatsAppStatus(data.payload.status);
+            }
         } else if (data.type === 'user:kick') {
             this.refreshUsers();
         }
