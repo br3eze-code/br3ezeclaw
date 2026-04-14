@@ -3,8 +3,10 @@
 // Voucher management and generation
 // ==========================================
 
-const chalk = require('chalk');
-const ora = require('ora');
+const _chalk = require('chalk');
+const chalk  = _chalk.default || _chalk;
+const _ora = require('ora');
+const ora = _ora.default || _ora;
 const QRCode = require('qrcode');
 const fs = require('fs');
 const { getDatabase } = require('../../core/database');
