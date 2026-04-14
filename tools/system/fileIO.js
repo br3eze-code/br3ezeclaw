@@ -1,17 +1,19 @@
-import fs from "fs";
-import path from "path";
-import { logger } from "./logger.js";
+'use strict';
+const fs   = require('fs');
+const path = require('path');
+const { logger } = require('../../src/core/logger');
+// ── Path helpers ──────────────────────────────────────────────────────────────
 
 function resolvePath(filePath) {
-    return path.join(process.cwd(), filePath);
+    return path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
 }
-
+ 
 function ensureDirectory(dirPath) {
     const resolved = resolvePath(dirPath);
-    if (!fs.existsSync(resolved)) {
-        fs.mkdirSync(resolved, { recursive: true });
-    }
+    if (!fs.existsSync(resolved)) fs.mkdirSync(resolved, { recursive: true });
 }
+
+// ── JSON file operations ──────────────────────────────────────────────────────
 
 function readFile(filePath, options = {}) {
     const resolved = resolvePath(filePath);
@@ -124,6 +126,58 @@ function getFilePermissionsSymbolic(filePath) {
     const resolved = resolvePath(filePath);
     return fs.statSync(resolved).mode;
 }
+// ── Raw file operations ───────────────────────────────────────────────────────
+ 
+function readRaw(filePath, encoding = 'utf8') {
+    return fs.readFileSync(resolvePath(filePath), encoding);
+}
+ 
+function writeRaw(filePath, data, encoding = 'utf8') {
+    const fullPath = resolvePath(filePath);
+    ensureDirectory(path.dirname(fullPath));
+    fs.writeFileSync(fullPath, data, encoding);
+}
+ 
+function appendRaw(filePath, data, encoding = 'utf8') {
+    fs.appendFileSync(resolvePath(filePath), data, encoding);
+}
+ 
+function deleteFile(filePath) {
+    fs.unlinkSync(resolvePath(filePath));
+}
+ 
+function fileExists(filePath) {
+    return fs.existsSync(resolvePath(filePath));
+}
+ 
+function listDirectory(dirPath) {
+    return fs.readdirSync(resolvePath(dirPath));
+}
+ 
+function getFileStats(filePath) {
+    return fs.statSync(resolvePath(filePath));
+}
+ 
+// ── In-memory cache ───────────────────────────────────────────────────────────
+ 
+const memoryCache = {};
+ 
+function setCache(key, value) {
+    memoryCache[key] = { value, time: Date.now() };
+}
+ 
+function getCache(key, ttl = 60000) {
+    const item = memoryCache[key];
+    if (!item) return null;
+    if (Date.now() - item.time > ttl) { delete memoryCache[key]; return null; }
+    return item.value;
+}
+ 
+function clearCache(key) {
+    if (key) delete memoryCache[key];
+    else Object.keys(memoryCache).forEach(k => delete memoryCache[k]);
+}
+
 export function writeFile(filePath, data) {
     try {
         const fullPath = resolvePath(filePath);
@@ -163,7 +217,7 @@ export function appendJson(filePath, record) {
         return false;
     }
 }
-const memoryCache = {};
+
 
 export function setCache(key, value) {
     memoryCache[key] = { value, time: Date.now() };
@@ -175,3 +229,10 @@ export function getCache(key, ttl = 60000) {
     if (Date.now() - item.time > ttl) { delete memoryCache[key]; return null; }
     return item.value;
 }
+module.exports = {
+    resolvePath, ensureDirectory,
+    writeFile, readFile, appendJson,
+    readRaw, writeRaw, appendRaw,
+    deleteFile, fileExists, listDirectory, getFileStats,
+    setCache, getCache, clearCache
+};
