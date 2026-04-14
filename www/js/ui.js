@@ -57,6 +57,19 @@ const UI = {
         this.showModal('Voucher Created', content);
     },
 
+    showWhatsAppQR(qr) {
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qr)}`;
+        const content = `
+            <div class="whatsapp-qr-container" style="text-align: center; padding: 20px;">
+                <p style="margin-bottom: 16px;">Scan this code with WhatsApp to connect AgentOS</p>
+                <div style="background: white; padding: 15px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                    <img src="${qrUrl}" alt="WhatsApp QR Code" style="display: block; width: 250px; height: 250px;">
+                </div>
+                <p style="margin-top: 16px; font-size: 14px; color: #89DDFF;">Connecting to Gateway...</p>
+            </div>`;
+        this.showModal('WhatsApp Login', content);
+    },
+
     showCreateVoucherModal() {
         const plans = CONFIG.VOUCHER_PLANS;
         const planOptions = Object.entries(plans).map(([key, plan]) => `
