@@ -1,194 +1,118 @@
-/**
- * AgentOS WiFi Manager - Security Module
- * Version: 2026.5.0
- * Features: XSS Prevention, Input Validation, Quantum-Resistant Hashing
- */
+// src/core/security.js
+const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+const hpp = require('hpp');
+const xss = require('xss-clean');
 
-class SecurityValidator {
-    static validateInput(input, type = 'string') {
-        if (input === null || input === undefined) return false;
-        if (typeof input !== type) return false;
+class SecurityManager {
+  constructor() {
+    this.encryptionKey = process.env.AGENTOS_MASTER_KEY || crypto.randomBytes(32);
+    this.failedAttempts = new Map();
+    this.blockedIPs = new Set();
+  }
 
-        // Length validation
-        if (type === 'string' && input.length > 10000) return false;
+  // Encrypt sensitive data (WhatsApp credentials, tokens)
+  encrypt(text) {
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipher('aes-256-gcm', this.encryptionKey);
+    let encrypted = cipher.update(text, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    const authTag = cipher.getAuthTag();
+    return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
+  }
 
-        return true;
+  decrypt(encryptedData) {
+    const [ivHex, authTagHex, encrypted] = encryptedData.split(':');
+    const decipher = crypto.createDecipher('aes-256-gcm', this.encryptionKey);
+    decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  }
+
+  // Input validation for network commands
+  sanitizeHost(host) {
+    // Prevent command injection
+    if (!/^[\w\.-]+$/.test(host)) {
+      throw new Error('Invalid hostname format');
     }
-
-    static sanitizeHtml(text) {
-        if (!this.validateInput(text)) return '';
-
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+    // Prevent internal IP scanning
+    const forbidden = ['127.0.0.1', 'localhost', '0.0.0.0', '::1'];
+    if (forbidden.includes(host.toLowerCase())) {
+      throw new Error('Forbidden host');
     }
+    return host;
+  }
 
-    static sanitizeAttribute(value) {
-        if (!this.validateInput(value)) return '';
-        return value.replace(/["'<>]/g, '');
+  // Rate limiter for messaging channels
+  getMessageLimiter() {
+    return rateLimit({
+      windowMs: 60 * 1000, // 1 minute
+      max: 30, // 30 messages per minute
+      message: 'Too many messages, please slow down',
+      standardHeaders: true,
+      legacyHeaders: false,
+    });
+  }
+
+  // Express security middleware stack
+  getSecurityMiddleware() {
+    return [
+      helmet({
+        contentSecurityPolicy: {
+          directives: {
+            defaultSrc: ["'self'"],
+            connectSrc: ["'self'", 'ws:', 'wss:', 'http://localhost:*', 'ws://localhost:*', 'https://*.firebaseio.com'],
+            scriptSrc: ["'self'", "'unsafe-inline'"], // For dashboard UI
+          },
+        },
+        hsts: {
+          maxAge: 31536000,
+          includeSubDomains: true,
+          preload: true
+        }
+      }),
+      hpp(), // Prevent HTTP Parameter Pollution
+      xss(), // XSS sanitization
+      this.auditMiddleware.bind(this)
+    ];
+  }
+
+  // Audit logging middleware
+  auditMiddleware(req, res, next) {
+    const { logger } = require('./logger');
+    const start = Date.now();
+    
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      logger.audit('http_request', {
+        method: req.method,
+        path: req.path,
+        statusCode: res.statusCode,
+        duration,
+        ip: req.ip,
+        userAgent: req.get('user-agent'),
+        correlationId: req.correlationId,
+        // Sanitize body to avoid logging passwords
+        body: this.sanitizeBody(req.body)
+      });
+    });
+    
+    next();
+  }
+
+  sanitizeBody(body) {
+    if (!body) return body;
+    const sensitive = ['password', 'token', 'secret', 'key', 'credential'];
+    const sanitized = { ...body };
+    for (const key of Object.keys(sanitized)) {
+      if (sensitive.some(s => key.toLowerCase().includes(s))) {
+        sanitized[key] = '[REDACTED]';
+      }
     }
-
-    static generateSecureId(prefix = 'sec') {
-        const timestamp = Date.now().toString(36);
-        const random = Math.random().toString(36).substr(2, 9);
-        const cryptoRandom = window.crypto ?
-            Array.from(window.crypto.getRandomValues(new Uint8Array(4)))
-                .map(b => b.toString(36))
-                .join('') :
-            Math.random().toString(36).substr(2, 5);
-
-        return `${prefix}_${timestamp}_${random}_${cryptoRandom}`;
-    }
-
-    static validateVoucherCode(code) {
-        if (!code || typeof code !== 'string') return false;
-        const pattern = /^STAR-[A-Z0-9]{6}$/;
-        return pattern.test(code);
-    }
-
-    static validateUsername(username) {
-        if (!username || typeof username !== 'string') return false;
-        const pattern = /^[a-zA-Z0-9_-]{3,20}$/;
-        return pattern.test(username);
-    }
-
-    static validateIPAddress(ip) {
-        if (!ip || typeof ip !== 'string') return false;
-        const pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
-        if (!pattern.test(ip)) return false;
-
-        const parts = ip.split('.');
-        return parts.every(part => {
-            const num = parseInt(part, 10);
-            return num >= 0 && num <= 255;
-        });
-    }
+    return sanitized;
+  }
 }
 
-class QuantumSecurity {
-    constructor() {
-        this.initialized = false;
-    }
-
-    async initialize() {
-        if (this.initialized) return;
-        this.initialized = true;
-        console.log('[QuantumSecurity] Initialized');
-    }
-
-    async hash(data) {
-        try {
-            if (!window.isSecureContext) {
-                return this.fallbackHash(data);
-            }
-
-            const encoder = new TextEncoder();
-            const dataBuffer = encoder.encode(JSON.stringify(data));
-
-            // Multi-layer hashing for quantum resistance
-            const hash1 = await crypto.subtle.digest('SHA-256', dataBuffer);
-            const hash2 = await crypto.subtle.digest('SHA-512', hash1);
-            const finalHash = await crypto.subtle.digest('SHA-256', hash2);
-
-            return Array.from(new Uint8Array(finalHash))
-                .map(b => b.toString(16).padStart(2, '0'))
-                .join('');
-
-        } catch (error) {
-            console.warn('[QuantumSecurity] Hash failed, using fallback');
-            return this.fallbackHash(data);
-        }
-    }
-
-    fallbackHash(data) {
-        let hash = 0;
-        const str = JSON.stringify(data);
-        for (let i = 0; i < str.length; i++) {
-            const char = str.charCodeAt(i);
-            hash = ((hash << 5) - hash + char) & 0xffffffff;
-        }
-        return hash.toString(16).padStart(64, '0');
-    }
-
-    async generateKeyPair() {
-        try {
-            if (!window.isSecureContext) {
-                return this.generateFallbackKey();
-            }
-
-            const key = await crypto.subtle.generateKey(
-                { name: 'AES-GCM', length: 256 },
-                true,
-                ['encrypt', 'decrypt']
-            );
-
-            return { key, type: 'AES-GCM-256' };
-        } catch (error) {
-            console.warn('[QuantumSecurity] Key generation failed, using fallback');
-            return this.generateFallbackKey();
-        }
-    }
-
-    generateFallbackKey() {
-        const keyMaterial = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-            .map(b => b.toString(16).padStart(2, '0'))
-            .join('');
-
-        return {
-            key: keyMaterial,
-            type: 'FALLBACK-256'
-        };
-    }
-}
-
-class RateLimiter {
-    constructor() {
-        this.buckets = new Map();
-        this.windowMs = 60000; // 1 minute
-        this.maxRequests = 30;
-    }
-
-    allow(key) {
-        const now = Date.now();
-        let bucket = this.buckets.get(key);
-
-        if (!bucket || now - bucket.start > this.windowMs) {
-            bucket = { count: 0, start: now };
-        }
-
-        if (bucket.count >= this.maxRequests) {
-            return false;
-        }
-
-        bucket.count++;
-        this.buckets.set(key, bucket);
-        return true;
-    }
-
-    cleanup() {
-        const cutoff = Date.now() - this.windowMs * 2;
-        for (const [key, bucket] of this.buckets) {
-            if (bucket.start < cutoff) {
-                this.buckets.delete(key);
-            }
-        }
-    }
-}
-
-// Global security instance
-const security = new SecurityValidator();
-const quantumSecurity = new QuantumSecurity();
-const rateLimiter = new RateLimiter();
-
-// Cleanup rate limiter periodically
-setInterval(() => rateLimiter.cleanup(), 60000);
-
-// Export for use in other modules
-if (typeof window !== 'undefined') {
-    window.SecurityValidator = SecurityValidator;
-    window.QuantumSecurity = QuantumSecurity;
-    window.RateLimiter = RateLimiter;
-    window.security = security;
-    window.quantumSecurity = quantumSecurity;
-    window.rateLimiter = rateLimiter;
-}
+module.exports = new SecurityManager();
