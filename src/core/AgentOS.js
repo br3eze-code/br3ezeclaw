@@ -1,9 +1,9 @@
 // src/core/AgentOS.js
 const EventEmitter = require('events');
 const SkillRegistry = require('./SkillRegistry');
-const ChannelManager = require('./ChannelManager');
-const MemoryManager = require('./MemoryManager');
-const LLMCoordinator = require('./LLMCoordinator');
+const { ChannelManager } = require('./channels/ChannelManager');
+const { MemoryManager } = require('./memory/MemoryManager');
+const { LLMCoordinator } = require('./llm/LLMCoordinator');
 const WorkflowEngine = require('./WorkflowEngine');
 const TelemetryCollector = require('./TelemetryCollector');
 const HealthMonitor = require('./HealthMonitor');
