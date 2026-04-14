@@ -18,6 +18,16 @@
 <h1 align="center">🤖 AgentOS</h1>
 <p align="center"><strong>Network Intelligence Platform — AI-powered MikroTik management via Telegram, WhatsApp & CLI</strong></p>
 
+[![Version](https://img.shields.io/badge/AgentOS-2026.5.2-00d4ff?style=for-the-badge&logo=router&logoColor=white)](https://github.com/br3eze-code/br3eze-code)
+[![MikroTik](https://img.shields.io/badge/MikroTik-RouterOS-ff6b00?style=for-the-badge&logo=mikrotik)](https://mikrotik.com)
+[![AI](https://img.shields.io/badge/AI-Gemini_2.5-ff9500?style=for-the-badge&logo=google)](https://deepmind.google/gemini)
+[![License](https://img.shields.io/badge/License-Apache_2.0-00ff9f?style=for-the-badge)](LICENSE)
+[![Node](https://img.shields.io/badge/Node.js-ESM-339933?style=for-the-badge&logo=node.js)](https://nodejs.org)
+[![Stars](https://img.shields.io/github/stars/br3eze-code/br3eze-code?style=for-the-badge&color=ffd700)](https://github.com/br3eze-code/br3eze-code/stargazers)
+ 
+[**Docs**](docs/) · [**Quick Start**](#quick-start) · [**CLI Reference**](#cli-reference) · [**Architecture**](#architecture) · [**Contributing**](CONTRIBUTING.md)
+ 
+
 <p align="center">
   <a href="#features">Features</a> •
   <a href="#quick-start">Quick Start</a> •
@@ -55,6 +65,15 @@ Right-click → Kick   ──┘
 - ReAct reasoning engine with 5-turn depth
 - Context-aware command suggestions and error recovery
 - AgentMemory for persistent session state
+
+### 💬 Multi-Channel Control
+| Channel | Status | Notes |
+|---------|--------|-------|
+| Telegram Bot | ✅ Production | Inline keyboards, button menus |
+| WhatsApp | ✅ Production | Baileys-powered, no Meta API needed |
+| WebSocket CLI | ✅ Production | Browser terminal experience |
+| REST API | ✅ Production | Programmatic/webhook access |
+| RouterOS Native | ✅ Production | On-device Sentinel agent (`.rsc`) |
 
 </td>
 <td width="50%">
