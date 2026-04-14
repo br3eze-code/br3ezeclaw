@@ -1,0 +1,42 @@
+{
+  "name": "agentos-vscode",
+  "displayName": "AgentOS Controller",
+  "description": "Control AgentOS fleet, run skills, and record browser automation from VSCode",
+  "version": "1.0.0",
+  "publisher": "br3eze-code",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "agentos.setConfig", "title": "AgentOS: Set Gateway Config" },
+      { "command": "agentos.runSkill", "title": "AgentOS: Run Skill" },
+      { "command": "agentos.memory", "title": "AgentOS: Memory Dump" },
+      { "command": "agentos.onboardAll", "title": "AgentOS: Onboard All Routers" },
+      { "command": "agentos.hotspotBrand", "title": "AgentOS: Brand Hotspots" },
+      { "command": "agentos.recordUi", "title": "AgentOS: Generate UI Recorder" },
+      { "command": "agentos.runUiAgent", "title": "AgentOS: Run UI Agent on URL" }
+    ],
+    "configuration": {
+      "title": "AgentOS",
+      "properties": {
+        "agentos.gatewayUrl": { "type": "string", "default": "http://10.0.1.100:3000", "description": "AgentOS Gateway URL" },
+        "agentos.apiToken": { "type": "string", "default": "", "description": "AgentOS API Token" }
+      }
+    },
+    "keybindings": [
+      { "command": "agentos.runSkill", "key": "ctrl+alt+a", "mac": "cmd+alt+a" },
+      { "command": "agentos.recordUi", "key": "ctrl+alt+r", "mac": "cmd+alt+r" }
+    ],
+    "viewsContainers": {
+      "activitybar": [{ "id": "agentos-sidebar", "title": "AgentOS", "icon": "$(server-process)" }]
+    },
+    "views": {
+      "agentos-sidebar": [
+        { "id": "agentos-skills", "name": "Skills" },
+        { "id": "agentos-recorder", "name": "UI Recorder" }
+      ]
+    }
+  }
+}
