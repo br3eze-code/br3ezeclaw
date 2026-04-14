@@ -18,6 +18,8 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.js\"",
     "build": "tsc --project tsconfig.json",
+    "build:android": "cordova build android",
+    "build:ios": "cordova build ios",
     "db:migrate": "node scripts/migrate-vouchers.js",
     "build:check": "tsc --noEmit",
     "postinstall": "node scripts/postinstall.js",
@@ -29,7 +31,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/br3eze-code/br3ezeclaw.git"
+    "url": "https://github.com/br3eze-code/br3eze-code.git"
   },
   "files": [
     "bin/",
@@ -107,6 +109,7 @@
   "devDependencies": {
     "cordova": "^13.0.0",
     "cordova-android": "^15.0.0",
+    "cordova-browser": "^7.0.0",
     "nodemon": "^3.1.11",
     "eslint": "^8.56.0",
     "eslint-config-prettier": "^9.2.0",
