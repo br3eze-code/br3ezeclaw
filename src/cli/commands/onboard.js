@@ -1,11 +1,14 @@
 // ==========================================
 // AGENTOS ONBOARD COMMAND
-// interactive setup wizard
+// Domain-agnostic interactive setup wizard
 // ==========================================
 
-const inquirer = require('inquirer');
-const chalk    = require('chalk');
-const ora      = require('ora');
+const _inquirer = require('inquirer');
+const inquirer  = _inquirer.default || _inquirer;
+const _chalk    = require('chalk');
+const chalk     = _chalk.default || _chalk;
+const _ora      = require('ora');
+const ora       = _ora.default || _ora;
 const fs       = require('fs');
 const crypto   = require('crypto');
 
