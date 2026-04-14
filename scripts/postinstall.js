@@ -1,13 +1,68 @@
 #!/usr/bin/env node
-
+'use strict';
 /**
- * Post-install script for global setup
- * Runs automatically after npm install -g agentos
+ * AgentOS Post-install
+ * Only runs for GLOBAL installs (npm install -g br3eze-code)
  */
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+
+const isLocalInstall = process.env.INIT_CWD &&
+    process.env.INIT_CWD === process.cwd();
+ 
+if (isLocalInstall) {
+    process.exit(0);
+}
+// ── Global install only ───────────────────────────────────────────────────────
+ 
+function getShellConfig() {
+    const shell = process.env.SHELL || '';
+    const home  = os.homedir();
+    if (shell.includes('zsh'))  return path.join(home, '.zshrc');
+    if (shell.includes('fish')) return path.join(home, '.config', 'fish', 'config.fish');
+    const bpFile = path.join(home, '.bash_profile');
+    return fs.existsSync(bpFile) ? bpFile : path.join(home, '.bashrc');
+}
+ 
+function detectNpmBin() {
+    try {
+        const { execFileSync } = require('child_process');
+        const prefix = execFileSync('npm', ['config', 'get', 'prefix'],
+            { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+        return process.platform === 'win32' ? prefix : path.join(prefix, 'bin');
+    } catch {
+        return null;
+    }
+}
+ 
+function ensureInPath(binPath) {
+    const configFile  = getShellConfig();
+    const exportLine  = `\n# AgentOS PATH\nexport PATH="${binPath}:$PATH"\n`;
+ 
+    if (fs.existsSync(configFile)) {
+        const content = fs.readFileSync(configFile, 'utf8');
+        if (content.includes('AgentOS PATH')) return; // already present
+    }
+ 
+    try {
+        fs.appendFileSync(configFile, exportLine);
+        console.log(`[AgentOS] PATH configured in ${configFile}`);
+        console.log(`[AgentOS] Run: source ${configFile}`);
+    } catch {
+        console.log(`[AgentOS] Could not write to ${configFile} — add ${binPath} to PATH manually`);
+    }
+}
+ 
+const binPath = detectNpmBin();
+if (binPath) {
+    const current = process.env.PATH || '';
+    if (!current.includes(binPath)) ensureInPath(binPath);
+}
+ 
+console.log('[AgentOS] Installation complete. Run: agentos onboard');
+
 const { execSync } = require('child_process');
 
 const chalk = require('chalk');
