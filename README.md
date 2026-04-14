@@ -1,10 +1,15 @@
-
+```html
+<div align="center">
+<pre>
 █████╗  ██████╗ ███████╗███╗   ██╗████████╗ ██████╗ ███████╗
 ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝██╔═══██╗██╔════╝
 ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║   ██║   ██║███████╗
 ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║   ██║   ██║╚════██║
 ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║   ╚██████╔╝███████║
 ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝    ╚═════╝ ╚══════╝
+</pre>
+</div>
+```
 <p align="center">
   <img src="https://img.shields.io/badge/AgentOS-2026.5.2-blue?style=for-the-badge&logo=router&logoColor=white" alt="Version">
   <img src="https://img.shields.io/badge/MikroTik-RouterOS-green?style=for-the-badge&logo=mikrotik" alt="MikroTik">
@@ -44,10 +49,6 @@ Managing MikroTik routers shouldn't require memorizing CLI commands or keeping W
 - **ReAct reasoning engine with 5-turn depth
 - **Context-aware command suggestions and error recovery
 - **AgentMemory for persistent session state
-💬 Multi-Channel Control
-```
-ChannelStatusNotesTelegram Bot✅ ProductionInline keyboards, button menusWhatsApp✅ ProductionBaileys-powered, no Meta API neededWebSocket CLI✅ ProductionBrowser terminal experienceREST API✅ ProductionProgrammatic/webhook accessRouterOS Native✅ ProductionOn-device Sentinel agent (.rsc)
-```
 
 </td>
 <td width="50%">
@@ -58,11 +59,22 @@ ChannelStatusNotesTelegram Bot✅ ProductionInline keyboards, button menusWhatsA
 - QR code generation
 - Wallet-based voucher storage
 
-### 🌐 Enterprise Ready
-- Multi-router mesh management
-- Real-time monitoring & alerts
-- Audit trails & rate limiting
-- CVE-2026-1526 security patched
+### 🌐 Network Management
+
+- Multi-router mesh — manage multiple MikroTik nodes from one gateway
+- Real-time DHCP/hotspot user monitoring
+- Firewall rule management
+- Ping, traceroute, bandwidth stats
+- Automated alerts via Telegram on threshold breach
+
+### 🔒 Security
+
+- CVE-2026-1526 patched
+- Command allowlist (no arbitrary RCE via Telegram)
+- HTTPS certificate validation on all outbound calls
+- Tiered permission policy (admin / operator / readonly)
+- Rate limiting + Joi input validation on all REST endpoints
+- Audit trail for all router operations
 
 </td>
 </tr>
@@ -73,9 +85,14 @@ ChannelStatusNotesTelegram Bot✅ ProductionInline keyboards, button menusWhatsA
 ## 📦 Installation
 
 ```bash
+#npm installation
+npm install -g br3eze-code
+
+or
+
 # Clone repository
 git clone https://github.com/br3eze-code/br3ezeclaw.git
-cd br3ezeclaw
+cd br3eze-code
 
 # Install dependencies
 npm install
@@ -87,7 +104,43 @@ npm run onboard
 cp .env.example .env
 # Edit .env with your MikroTik credentials
 ```
+Environment Variables
+```
+# MikroTik
+MIKROTIK_HOST=192.168.88.1
+MIKROTIK_USER=admin
+MIKROTIK_PASS=your_password
+MIKROTIK_PORT=8728
+
+# Telegram
+TELEGRAM_TOKEN=your_bot_token
+TELEGRAM_ADMIN_CHAT_ID=your_chat_id
+
+# AI
+GEMINI_API_KEY=your_gemini_key
+ANTROPIC_API_KEY=
+OPENAI_API_KEY=
+
+# Payments (Mastercard A2A)
+MC_CONSUMER_KEY=your_key
+MC_PRIVATE_KEY_PATH=./certs/sandbox.p12
+
+# Database
+FIREBASE_PROJECT_ID=your_project
+# Or leave blank for local JSON fallback
+```
+
 🎮 Quick Start
+
+Prerequisites
+
+Node.js 20+ (ESM)
+MikroTik RouterOS 7.x
+Telegram Bot Token (from @BotFather)
+Google Gemini API Key(Any LLM Factory)
+Firebase project (or use local JSON fallback)
+
+
 CLI Mode
 ```
 # Start interactive CLI
