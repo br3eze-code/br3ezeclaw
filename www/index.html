@@ -160,17 +160,21 @@
                     </div>
                 </div>
 
-                <!-- OAuth Connections -->
+                <!-- WhatsApp Gateway -->
                 <div class="omni-section">
-                    <h4>🔐 OAuth Services</h4>
-                    <div id="oauth-status" class="oauth-list">
-                        <div class="service-item">
-                            <span class="service-icon">🐙</span>
-                            <span class="service-name">GitHub</span>
-                            <button class="btn-small" onclick="App.connectOAuth('github')">Connect</button>
+                    <h4>💬 WhatsApp Gateway</h4>
+                    <div id="whatsapp-status" class="whatsapp-status-card">
+                        <div class="status-info">
+                            <span class="status-dot disconnected"></span>
+                            <span class="status-label">Disconnected</span>
                         </div>
+                        <button class="btn secondary btn-small" id="whatsapp-login-btn" onclick="App.initiateWhatsAppLogin()">
+                            <span>📱</span> Login with WhatsApp
+                        </button>
                     </div>
                 </div>
+
+                <!-- OAuth Connections -->
 
                 <!-- Command Execution -->
                 <div class="omni-section">
