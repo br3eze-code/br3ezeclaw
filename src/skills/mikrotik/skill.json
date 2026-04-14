@@ -1,0 +1,19 @@
+{
+  "name": "mikrotik",
+  "version": "1.0.0",
+  "description": "MikroTik RouterOS management — hotspot users, firewall, ping, system stats",
+  "entry": "index.js",
+  "parameters": {
+    "command": {
+      "type": "string",
+      "required": true,
+      "description": "RouterOS command to run (e.g. user.list, network.ping)"
+    },
+    "args": {
+      "type": "object",
+      "required": false,
+      "description": "Command arguments"
+    }
+  },
+  "tags": ["network", "mikrotik", "routeros"]
+}
