@@ -1,0 +1,25 @@
+{
+  "name": "mcporter",
+  "version": "1.0.0",
+  "description": "MikroTik Configuration Porter - Backup, Export, and Restore",
+  "entry": "index.js",
+  "parameters": {
+    "router": {
+      "type": "string",
+      "required": true,
+      "description": "The ID of the router to target"
+    },
+    "filename": {
+      "type": "string",
+      "required": false,
+      "description": "Name of the backup/export file"
+    }
+  },
+  "examples": [
+    {
+      "text": "Backup router configuration",
+      "action": "mcporter.backup",
+      "params": { "router": "main-gateway" }
+    }
+  ]
+}
