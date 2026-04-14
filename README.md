@@ -22,7 +22,7 @@
 <p align="center">
   <a href="#features">Features</a> •
   <a href="#quick-start">Quick Start</a> •
-  <a href="#documentation">docs/</a> •
+  <a href="#documentation">docs</a> •
   <a href="#demo">Demo</a> •
   <a href="#contributing">CONTRIBUTING</a>
 </p>
