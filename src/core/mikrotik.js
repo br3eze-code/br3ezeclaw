@@ -708,3 +708,4 @@ module.exports = {
     // Legacy alias
     getMikroTikClient:      getManager,
     testMikroTikConnection: testConnection
+};
