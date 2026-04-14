@@ -11,19 +11,11 @@ const { AsyncLocalStorage } = require('async_hooks');
 // Create async local storage for correlation IDs
 const asyncLocalStorage = new AsyncLocalStorage();
 
-const correlationId = (req, res, next) => {
+const correlationIdMiddleware = (req, res, next) => {
   const id = req.headers['x-correlation-id'] || uuidv4();
   req.correlationId = id;
   res.setHeader('x-correlation-id', id);
-  next();
-};
-format: winston.format.combine(
-  winston.format((info) => {
-    info.correlationId = asyncLocalStorage.getStore()?.get('correlationId');
-    return info;
-  })(),
-  winston.format.json()
-)
+
   // Run request in async context with correlation ID
   asyncLocalStorage.run(new Map(), () => {
     asyncLocalStorage.getStore().set('correlationId', id);
