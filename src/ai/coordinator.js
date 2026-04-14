@@ -236,6 +236,25 @@ If rebooting, always ask for confirmation first.`;
       data: result
     };
   }
+  async processInteraction(msg, context = {}) {
+    logger.debug(`Processing interaction from ${context.channel || 'unknown'}: ${msg.text}`);
+    
+    const result = await this.processQuery(msg.text, { 
+      userId: msg.userId,
+      channel: context.channel,
+      ...context
+    });
+    
+    return {
+      success: !result.error,
+      result: {
+        text: result.response,
+        data: result.data,
+        suggestions: result.suggestions
+      },
+      error: result.message
+    };
+  }
 }
 
 module.exports = AICoordinator;
