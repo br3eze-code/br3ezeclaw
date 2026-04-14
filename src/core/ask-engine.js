@@ -114,6 +114,34 @@ class AskEngine {
       
     } catch (error) {
       logger.warn('AI processing failed:', error.message);
+const failedLog = await fs.readFile('./knowledge/failed-commands.md', 'utf8');
+const failures = (failedLog.match(new RegExp(call.name, 'g')) || []).length;
+
+if (failures >= 2) {
+  await telegramCtx.reply(`🤖 *Self-Improvement*: ${call.name} failed ${failures} times. Analyzing root cause...`);
+
+  const diagnosis = await this.gemini.generate({
+    prompt: `AgentOS skill '${call.name}' failed ${failures} times. 
+Failed logs: ${failedLog}
+Soul.md rules: ${memory['soul.md']}
+
+Should I: 
+A) Edit ${call.name}.js to fix it using 'self_edit'
+B) Create new skill using 'skill_create' 
+C) Ask user for help
+
+Reply with A, B, or C and the fix.`
+  });
+
+  if (diagnosis.text.startsWith('A')) {
+    await telegramCtx.reply(`📝 *Self-editing* ${call.name}.js to fix bug...`);
+    // Gemini generates the fix and calls self_edit
+  }
+  if (diagnosis.text.startsWith('B')) {
+    await telegramCtx.reply(`🧬 *Creating new skill* to handle this...`);
+    // Gemini generates new skill and calls skill_create
+  }
+}
       
       // Return helpful error with suggestions
       return {
