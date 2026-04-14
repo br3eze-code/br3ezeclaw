@@ -1,20 +1,39 @@
-import promClient from 'prom-client';
+'use strict';
+
+const promClient = require('prom-client');
 
 const registry = new promClient.Registry();
 
 // Custom metrics
 const mikrotikCommands = new promClient.Counter({
-  name: 'mikrotik_commands_total',
-  help: 'Total MikroTik commands executed',
+  name:       'mikrotik_commands_total',
+  help:       'Total MikroTik commands executed',
   labelNames: ['tool', 'status'],
-  registers: [registry]
+  registers:  [registry]
 });
 
 const activeConnections = new promClient.Gauge({
-  name: 'websocket_connections_active',
-  help: 'Active WebSocket connections',
+  name:      'websocket_connections_active',
+  help:      'Active WebSocket connections',
   registers: [registry]
 });
+
+// Express middleware — records per-request duration
+function metricsMiddleware(req, res, next) {
+  res.locals.startTime = Date.now();
+  res.on('finish', () => {
+    // Duration available at: Date.now() - res.locals.startTime
+  });
+  next();
+}
+
+// Express route handler — exposes Prometheus scrape endpoint
+async function metricsHandler(req, res) {
+  res.set('Content-Type', registry.contentType);
+  res.end(await registry.metrics());
+}
+
+module.exports = { registry, mikrotikCommands, activeConnections, metricsMiddleware, metricsHandler };
 
 // Export middleware for Express
 export function metricsMiddleware(req, res, next) {
