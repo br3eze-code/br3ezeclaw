@@ -3,8 +3,10 @@
 // Hotspot user management
 // ==========================================
 
-const chalk = require('chalk');
-const ora = require('ora');
+const _chalk = require('chalk');
+const chalk  = _chalk.default || _chalk;
+const _ora = require('ora');
+const ora = _ora.default || _ora;
 const { getMikroTikClient } = require('../../core/mikrotik');
 
 module.exports = (program) => {
