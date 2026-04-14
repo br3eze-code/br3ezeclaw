@@ -1,11 +1,13 @@
 // ==========================================
-// AGENTOS STATUS COMMAND - FIXED
+// AGENTOS STATUS COMMAND
 // Quick system overview with proper error handling
 // ==========================================
 
-const chalk = require('chalk');
+const _chalk = require('chalk');
+const chalk  = _chalk.default || _chalk;
 const fs = require('fs');
-const ora = require('ora');
+const _ora = require('ora');
+const ora = _ora.default || _ora;
 
 module.exports = (program) => {
   program
