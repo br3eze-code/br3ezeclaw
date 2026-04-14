@@ -31,7 +31,7 @@
 
 Managing MikroTik routers shouldn't require memorizing CLI commands or keeping WinBox open 24/7. AgentOS brings **conversational AI** to network administration — control your infrastructure through natural language on your favorite messaging platform.
 
-### The Problem AgentOS Solves
+## The Problem AgentOS Solves
 Managing community WiFi infrastructure across multiple MikroTik nodes is painful. WinBox requires a desktop. RouterOS CLI requires memorizing commands. Hotspot billing requires manual voucher generation. Payment collection is disconnected from provisioning.
 AgentOS collapses this into one intelligent agent you control from Telegram.
 ```
@@ -136,18 +136,18 @@ FIREBASE_PROJECT_ID=your_project
 # Or leave blank for local JSON fallback
 ```
 
-🎮 Quick Start
+## 🎮 Quick Start
 
-Prerequisites
+### Prerequisites
 
-Node.js 20+ (ESM)
-MikroTik RouterOS 7.x
-Telegram Bot Token (from @BotFather)
-Google Gemini API Key(Any LLM Factory)
-Firebase project (or use local JSON fallback)
+- Node.js 20+ (ESM)
+- MikroTik RouterOS 7.x
+- Telegram Bot Token (from @BotFather)
+- Google Gemini API Key(Any LLM Factory)
+- Firebase project (or use local JSON fallback)
 
 
-CLI Mode
+### CLI Mode
 ```
 # Start interactive CLI
 npm start
@@ -158,7 +158,7 @@ agentos network ping 8.8.8.8      # Ping test
 agentos users kick john          # Disconnect user
 agentos voucher create 1Day      # Generate voucher
 ```
-Daemon Mode (with Telegram/WhatsApp)
+### Daemon Mode (with Telegram/WhatsApp)
 ```
 # Start gateway
 agentos gateway --daemon
@@ -375,22 +375,22 @@ agentos
 | **Logging**    | Winston                                         |
 
 ## Deployment
-Docker
+### Docker
 ```bash
 docker compose up -d
 ```
-Podman
+### Podman
 ```bash
 cp agentos.podman.env .env
 podman play kube agentos.yaml
 ```
-Manual (Linux systemd)
+### Manual (Linux systemd)
 ```bash
 ./install.sh
 systemctl enable agentos
 systemctl start agentos
 ```
-RouterOS Sentinel
+### RouterOS Sentinel
 ```bash
 # Upload via WinBox Files or SCP, then:
 /import file-name=agentos-sentinel.rsc
@@ -398,7 +398,7 @@ RouterOS Sentinel
 /system/scheduler print
 ```
 
-### 🤝 Contributing
+## 🤝 Contributing
 > **We welcome contributions! Please see CONTRIBUTING.md for guidelines.**
 
 ### Quick Contributions 
@@ -408,7 +408,7 @@ RouterOS Sentinel
 - 📖 Improve documentation
 - 🔧 Submit PRs for good first issues
 
-### 📜License
+## 📜License
 Apache 2.0 © 2026 Brighton Mzacana · br3eze.africa
 
 <p align="center">
