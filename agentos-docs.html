@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentOS — Docs & CLI Explorer</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cyan: #00d4ff;
+    --amber: #ff9500;
+    --green: #00ff9f;
+    --red: #ff3c3c;
+    --bg: #050a0e;
+    --bg2: #0a1520;
+    --bg3: #0f1e2e;
+    --border: #1a3a52;
+    --text: #b0d4e8;
+    --dim: #4a6a7a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,212,255,0.015) 2px,
+      rgba(0,212,255,0.015) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* Header */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 20px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(180deg, rgba(0,212,255,0.05), transparent);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(10px);
+  }
+
+  .logo {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 900;
+    font-size: 1.4rem;
+    color: var(--cyan);
+    text-shadow: 0 0 20px var(--cyan);
+    letter-spacing: 4px;
+  }
+
+  .logo span { color: var(--amber); }
+
+  .version-badge {
+    background: rgba(0,212,255,0.1);
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    letter-spacing: 2px;
+    clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+  }
+
+  .nav-tabs {
+    display: flex;
+    gap: 4px;
+  }
+
+  .nav-tab {
+    padding: 8px 20px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    cursor: pointer;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.8rem;
+    letter-spacing: 2px;
+    transition: all 0.2s;
+    text-transform: uppercase;
+  }
+
+  .nav-tab:hover, .nav-tab.active {
+    border-color: var(--cyan);
+    color: var(--cyan);
+    background: rgba(0,212,255,0.05);
+    text-shadow: 0 0 8px var(--cyan);
+  }
+
+  /* Layout */
+  .container { display: flex; min-height: calc(100vh - 80px); }
+
+  /* Sidebar */
+  aside {
+    width: 260px;
+    min-width: 260px;
+    border-right: 1px solid var(--border);
+    padding: 24px 0;
+    background: var(--bg2);
+    overflow-y: auto;
+    max-height: calc(100vh - 80px);
+    position: sticky;
+    top: 80px;
+  }
+
+  .sidebar-section { margin-bottom: 24px; }
+
+  .sidebar-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.6rem;
+    letter-spacing: 4px;
+    color: var(--amber);
+    padding: 0 20px 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+
+  .sidebar-link {
+    display: block;
+    padding: 8px 20px;
+    color: var(--dim);
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.15s;
+    border-left: 2px solid transparent;
+  }
+
+  .sidebar-link:hover, .sidebar-link.active {
+    color: var(--cyan);
+    border-left-color: var(--cyan);
+    background: rgba(0,212,255,0.04);
+  }
+
+  .sidebar-link.active { background: rgba(0,212,255,0.08); }
+
+  /* Search */
+  .search-box {
+    margin: 0 16px 20px;
+    position: relative;
+  }
+
+  .search-box input {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px 8px 32px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.8rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .search-box input:focus { border-color: var(--cyan); }
+
+  .search-box::before {
+    content: '⌕';
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--dim);
+    font-size: 1rem;
+  }
+
+  /* Main content */
+  main {
+    flex: 1;
+    padding: 40px;
+    overflow-y: auto;
+    max-height: calc(100vh - 80px);
+  }
+
+  /* Panels */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* Corner bracket cards */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    padding: 24px;
+    margin-bottom: 24px;
+    position: relative;
+  }
+
+  .card::before, .card::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-color: var(--cyan);
+    border-style: solid;
+  }
+
+  .card::before {
+    top: -1px; left: -1px;
+    border-width: 2px 0 0 2px;
+  }
+
+  .card::after {
+    bottom: -1px; right: -1px;
+    border-width: 0 2px 2px 0;
+  }
+
+  .card-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.85rem;
+    color: var(--cyan);
+    letter-spacing: 3px;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+  }
+
+  /* Hero banner */
+  .hero {
+    text-align: center;
+    padding: 40px 20px 32px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 32px;
+  }
+
+  .hero-ascii {
+    font-size: 0.55rem;
+    line-height: 1.2;
+    color: var(--cyan);
+    opacity: 0.7;
+    letter-spacing: 2px;
+    margin-bottom: 16px;
+    white-space: pre;
+    text-shadow: 0 0 10px var(--cyan);
+  }
+
+  .hero-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 2rem;
+    font-weight: 900;
+    color: var(--cyan);
+    text-shadow: 0 0 30px var(--cyan);
+    letter-spacing: 8px;
+    margin-bottom: 8px;
+  }
+
+  .hero-sub {
+    color: var(--amber);
+    font-size: 0.85rem;
+    letter-spacing: 3px;
+    margin-bottom: 24px;
+  }
+
+  .stat-row {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .stat {
+    background: rgba(0,212,255,0.06);
+    border: 1px solid var(--border);
+    padding: 12px 20px;
+    text-align: center;
+    clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+  }
+
+  .stat-value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.4rem;
+    color: var(--amber);
+    text-shadow: 0 0 10px var(--amber);
+  }
+
+  .stat-label { font-size: 0.65rem; color: var(--dim); letter-spacing: 2px; }
+
+  /* Command grid */
+  .cmd-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+  }
+
+  .cmd-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cmd-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--cyan);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .cmd-card:hover { border-color: var(--cyan); background: rgba(0,212,255,0.05); }
+  .cmd-card:hover::before { opacity: 1; }
+
+  .cmd-name {
+    color: var(--green);
+    font-size: 0.9rem;
+    margin-bottom: 4px;
+  }
+
+  .cmd-name .sub { color: var(--amber); }
+
+  .cmd-desc { color: var(--dim); font-size: 0.75rem; margin-bottom: 8px; }
+
+  .cmd-syntax {
+    background: rgba(0,0,0,0.4);
+    padding: 4px 8px;
+    font-size: 0.72rem;
+    color: var(--cyan);
+    border-left: 2px solid var(--cyan);
+  }
+
+  .cmd-tags { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+
+  .tag {
+    background: rgba(255,149,0,0.1);
+    border: 1px solid rgba(255,149,0,0.3);
+    color: var(--amber);
+    padding: 2px 8px;
+    font-size: 0.65rem;
+    letter-spacing: 1px;
+  }
+
+  /* Terminal simulator */
+  .terminal {
+    background: #000;
+    border: 1px solid var(--border);
+    border-top: 2px solid var(--cyan);
+    font-family: 'Share Tech Mono', monospace;
+    overflow: hidden;
+  }
+
+  .terminal-bar {
+    background: var(--bg3);
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .terminal-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .terminal-dot.r { background: var(--red); }
+  .terminal-dot.y { background: var(--amber); }
+  .terminal-dot.g { background: var(--green); }
+
+  .terminal-title {
+    margin-left: auto;
+    margin-right: auto;
+    font-size: 0.7rem;
+    color: var(--dim);
+    letter-spacing: 2px;
+  }
+
+  .terminal-output {
+    padding: 16px;
+    min-height: 280px;
+    max-height: 360px;
+    overflow-y: auto;
+    font-size: 0.82rem;
+    line-height: 1.6;
+  }
+
+  .t-line { margin-bottom: 2px; }
+  .t-prompt { color: var(--cyan); }
+  .t-cmd { color: var(--green); }
+  .t-out { color: var(--text); }
+  .t-ok { color: var(--green); }
+  .t-err { color: var(--red); }
+  .t-warn { color: var(--amber); }
+  .t-dim { color: var(--dim); }
+  .t-val { color: var(--amber); }
+
+  .terminal-input-row {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--bg3);
+  }
+
+  .t-prompt-label {
+    color: var(--cyan);
+    margin-right: 8px;
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+
+  .terminal-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--green);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.82rem;
+    caret-color: var(--cyan);
+  }
+
+  .run-btn {
+    background: rgba(0,212,255,0.1);
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    padding: 4px 16px;
+    cursor: pointer;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 2px;
+    transition: all 0.2s;
+    margin-left: 8px;
+  }
+
+  .run-btn:hover { background: var(--cyan); color: var(--bg); }
+
+  /* Quick commands */
+  .quick-cmds {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .qcmd {
+    background: rgba(0,255,159,0.05);
+    border: 1px solid rgba(0,255,159,0.2);
+    color: var(--green);
+    padding: 4px 12px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 1px;
+  }
+
+  .qcmd:hover { background: rgba(0,255,159,0.15); border-color: var(--green); }
+
+  /* Architecture diagram */
+  .arch-diagram {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    padding: 24px;
+    font-size: 0.78rem;
+    line-height: 1.8;
+    color: var(--text);
+    overflow-x: auto;
+  }
+
+  .arch-node {
+    display: inline-block;
+    background: rgba(0,212,255,0.08);
+    border: 1px solid var(--cyan);
+    padding: 4px 12px;
+    color: var(--cyan);
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+  }
+
+  .arch-node.amber {
+    background: rgba(255,149,0,0.08);
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+
+  .arch-node.green {
+    background: rgba(0,255,159,0.08);
+    border-color: var(--green);
+    color: var(--green);
+  }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th {
+    background: rgba(0,212,255,0.08);
+    color: var(--cyan);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.65rem;
+    letter-spacing: 3px;
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  td { padding: 10px 12px; border-bottom: 1px solid rgba(26,58,82,0.5); font-size: 0.8rem; }
+  tr:hover td { background: rgba(0,212,255,0.03); }
+  td .mono { color: var(--green); }
+  td .val { color: var(--amber); }
+  td .ok { color: var(--green); }
+  td .warn { color: var(--amber); }
+
+  /* Debug panel */
+  .debug-item {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--red);
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+
+  .debug-item.warn { border-left-color: var(--amber); }
+  .debug-item.fixed { border-left-color: var(--green); }
+  .debug-item.info { border-left-color: var(--cyan); }
+
+  .debug-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .debug-id {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.65rem;
+    color: var(--dim);
+    letter-spacing: 2px;
+  }
+
+  .severity {
+    padding: 2px 10px;
+    font-size: 0.65rem;
+    letter-spacing: 2px;
+    font-family: 'Orbitron', sans-serif;
+  }
+
+  .severity.critical { background: rgba(255,60,60,0.2); color: var(--red); border: 1px solid var(--red); }
+  .severity.high { background: rgba(255,149,0,0.2); color: var(--amber); border: 1px solid var(--amber); }
+  .severity.fixed { background: rgba(0,255,159,0.2); color: var(--green); border: 1px solid var(--green); }
+  .severity.info { background: rgba(0,212,255,0.1); color: var(--cyan); border: 1px solid var(--cyan); }
+
+  .debug-title { color: var(--text); font-size: 0.88rem; margin-bottom: 6px; }
+  .debug-body { color: var(--dim); font-size: 0.78rem; line-height: 1.6; }
+  .debug-body code {
+    background: rgba(0,0,0,0.5);
+    color: var(--red);
+    padding: 1px 6px;
+    border: 1px solid rgba(255,60,60,0.2);
+    font-size: 0.8em;
+  }
+  .debug-body code.fix { color: var(--green); border-color: rgba(0,255,159,0.2); }
+  .debug-file { color: var(--amber); font-size: 0.72rem; margin-top: 8px; }
+
+  /* Section title */
+  .section-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.75rem;
+    letter-spacing: 4px;
+    color: var(--amber);
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .section-title::before {
+    content: '▸';
+    color: var(--cyan);
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--cyan); }
+
+  /* Blinking cursor */
+  .blink {
+    animation: blink 1s step-end infinite;
+    color: var(--cyan);
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* Glow pulse */
+  @keyframes glow {
+    0%, 100% { text-shadow: 0 0 10px var(--cyan); }
+    50% { text-shadow: 0 0 30px var(--cyan), 0 0 60px var(--cyan); }
+  }
+
+  .hero-title { animation: glow 3s ease-in-out infinite; }
+
+  /* Filter bar */
+  .filter-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .filter-btn {
+    padding: 5px 14px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    cursor: pointer;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+  }
+
+  .filter-btn:hover, .filter-btn.active {
+    border-color: var(--amber);
+    color: var(--amber);
+    background: rgba(255,149,0,0.06);
+  }
+
+  @media (max-width: 768px) {
+    aside { display: none; }
+    main { padding: 20px; }
+    header { padding: 12px 20px; flex-wrap: wrap; gap: 8px; }
+    .nav-tabs { display: none; }
+    .hero-ascii { font-size: 0.38rem; }
+    .hero-title { font-size: 1.2rem; letter-spacing: 4px; }
+    .cmd-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">AGENT<span>OS</span></div>
+  <nav class="nav-tabs">
+    <button class="nav-tab active" onclick="showPanel('overview', this)">OVERVIEW</button>
+    <button class="nav-tab" onclick="showPanel('commands', this)">COMMANDS</button>
+    <button class="nav-tab" onclick="showPanel('terminal', this)">TERMINAL</button>
+    <button class="nav-tab" onclick="showPanel('debug', this)">DEBUG LOG</button>
+    <button class="nav-tab" onclick="showPanel('arch', this)">ARCHITECTURE</button>
+  </nav>
+  <div class="version-badge">v2026.5.2</div>
+</header>
+
+<div class="container">
+  <aside>
+    <div class="search-box">
+      <input type="text" id="sideSearch" placeholder="search docs..." oninput="filterSidebar(this.value)">
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">CORE</div>
+      <div class="sidebar-link active" onclick="showPanel('overview', null); setActive(this)">Overview</div>
+      <div class="sidebar-link" onclick="showPanel('arch', null); setActive(this)">Architecture</div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">CLI REFERENCE</div>
+      <div class="sidebar-link" onclick="showPanel('commands', null); filterCmds('all'); setActive(this)">All Commands</div>
+      <div class="sidebar-link" onclick="showPanel('commands', null); filterCmds('network'); setActive(this)">Network</div>
+      <div class="sidebar-link" onclick="showPanel('commands', null); filterCmds('users'); setActive(this)">Users</div>
+      <div class="sidebar-link" onclick="showPanel('commands', null); filterCmds('voucher'); setActive(this)">Voucher</div>
+      <div class="sidebar-link" onclick="showPanel('commands', null); filterCmds('system'); setActive(this)">System</div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">TOOLS</div>
+      <div class="sidebar-link" onclick="showPanel('terminal', null); setActive(this)">Terminal Simulator</div>
+      <div class="sidebar-link" onclick="showPanel('debug', null); setActive(this)">Debug Log</div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">LINKS</div>
+      <div class="sidebar-link" onclick="window.open('https://github.com/br3eze-code/br3eze-code','_blank')">↗ GitHub</div>
+      <div class="sidebar-link" onclick="window.open('https://br3eze.africa','_blank')">↗ br3eze.africa</div>
+    </div>
+  </aside>
+
+  <main>
+
+    <!-- OVERVIEW PANEL -->
+    <div id="panel-overview" class="panel active">
+      <div class="hero">
+        <pre class="hero-ascii"> █████╗  ██████╗ ███████╗███╗   ██╗████████╗ ██████╗ ███████╗
+██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝██╔═══██╗██╔════╝
+███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║   ██║   ██║███████╗
+██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║   ██║   ██║╚════██║
+██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║   ╚██████╔╝███████║
+╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝    ╚═════╝ ╚══════╝</pre>
+        <div class="hero-title">AGENTOS</div>
+        <div class="hero-sub">NETWORK INTELLIGENCE PLATFORM · AFRICA</div>
+        <div class="stat-row">
+          <div class="stat"><div class="stat-value">5T</div><div class="stat-label">REACT DEPTH</div></div>
+          <div class="stat"><div class="stat-value">3</div><div class="stat-label">CHANNELS</div></div>
+          <div class="stat"><div class="stat-value">30+</div><div class="stat-label">CLI COMMANDS</div></div>
+          <div class="stat"><div class="stat-value">3</div><div class="stat-label">BILLING PLANS</div></div>
+          <div class="stat"><div class="stat-value">A2A</div><div class="stat-label">PAYMENTS</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">QUICK START</div>
+        <div style="background:#000;padding:16px;border:1px solid var(--border);font-size:0.8rem;line-height:2;">
+          <div><span style="color:var(--dim)"># Clone and install</span></div>
+          <div><span style="color:var(--cyan)">$</span> <span style="color:var(--green)">git clone https://github.com/br3eze-code/br3eze-code.git</span></div>
+          <div><span style="color:var(--cyan)">$</span> <span style="color:var(--green)">npm install</span></div>
+          <div><span style="color:var(--cyan)">$</span> <span style="color:var(--green)">npm run onboard</span></div>
+          <div>&nbsp;</div>
+          <div><span style="color:var(--dim)"># Start gateway (foreground)</span></div>
+          <div><span style="color:var(--cyan)">$</span> <span style="color:var(--green)">npm start</span></div>
+          <div>&nbsp;</div>
+          <div><span style="color:var(--dim)"># Start as daemon</span></div>
+          <div><span style="color:var(--cyan)">$</span> <span style="color:var(--green)">agentos gateway --daemon</span></div>
+          <div>&nbsp;</div>
+          <div><span style="color:var(--dim)"># Deploy RouterOS Sentinel</span></div>
+          <div><span style="color:var(--amber)">/import file-name=agentos-sentinel.rsc</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">TECH STACK</div>
+        <table>
+          <thead><tr><th>LAYER</th><th>TECHNOLOGY</th><th>STATUS</th></tr></thead>
+          <tbody>
+            <tr><td>Runtime</td><td class="mono">Node.js 20 ESM</td><td class="ok">✅ PROD</td></tr>
+            <tr><td>Router API</td><td class="mono">MikroTik RouterOS v7</td><td class="ok">✅ PROD</td></tr>
+            <tr><td>AI Engine</td><td class="mono">Gemini 2.5 Flash</td><td class="ok">✅ PROD</td></tr>
+            <tr><td>Messaging</td><td class="mono">Telegram + Baileys WA</td><td class="ok">✅ PROD</td></tr>
+            <tr><td>Payments</td><td class="mono">Mastercard A2A OAuth 1.0a</td><td class="ok">✅ PROD</td></tr>
+            <tr><td>Database</td><td class="mono">Firebase Firestore / Local JSON</td><td class="ok">✅ PROD</td></tr>
+            <tr><td>Gateway</td><td class="mono">WebSocket + Express</td><td class="ok">✅ PROD</td></tr>
+            <tr><td>Native Agent</td><td class="mono">RouterOS Script (.rsc)</td><td class="ok">✅ PROD</td></tr>
+            <tr><td>Mobile</td><td class="mono">Apache Cordova</td><td class="warn">🔧 BETA</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="card-title">BILLING PLANS</div>
+        <table>
+          <thead><tr><th>PLAN</th><th>DURATION</th><th>DATA QUOTA</th><th>EXPIRY RULE</th></tr></thead>
+          <tbody>
+            <tr><td class="val">1Day</td><td>24 hours</td><td>1 GB</td><td>Time OR quota (first wins)</td></tr>
+            <tr><td class="val">7Day</td><td>7 days</td><td>7 GB</td><td>Time OR quota (first wins)</td></tr>
+            <tr><td class="val">30Day</td><td>30 days</td><td>30 GB</td><td>Time OR quota (first wins)</td></tr>
+          </tbody>
+        </table>
+        <div style="color:var(--dim);font-size:0.75rem;margin-top:8px;">
+          MikroTik: <span style="color:var(--green)">limit-bytes-total</span> enforced alongside <span style="color:var(--green)">session-time-limit</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMMANDS PANEL -->
+    <div id="panel-commands" class="panel">
+      <div class="section-title">CLI COMMAND REFERENCE</div>
+
+      <div class="filter-bar">
+        <button class="filter-btn active" onclick="filterCmds('all'); setFilterActive(this)">ALL</button>
+        <button class="filter-btn" onclick="filterCmds('network'); setFilterActive(this)">NETWORK</button>
+        <button class="filter-btn" onclick="filterCmds('users'); setFilterActive(this)">USERS</button>
+        <button class="filter-btn" onclick="filterCmds('voucher'); setFilterActive(this)">VOUCHER</button>
+        <button class="filter-btn" onclick="filterCmds('system'); setFilterActive(this)">SYSTEM</button>
+        <button class="filter-btn" onclick="filterCmds('config'); setFilterActive(this)">CONFIG</button>
+        <button class="filter-btn" onclick="filterCmds('telegram'); setFilterActive(this)">TELEGRAM</button>
+      </div>
+
+      <div class="cmd-grid" id="cmdGrid"></div>
+    </div>
+
+    <!-- TERMINAL PANEL -->
+    <div id="panel-terminal" class="panel">
+      <div class="section-title">INTERACTIVE TERMINAL SIMULATOR</div>
+
+      <div style="margin-bottom:16px;color:var(--dim);font-size:0.78rem;">
+        Simulates AgentOS CLI responses. Type a command or click a quick command below.
+      </div>
+
+      <div class="quick-cmds">
+        <button class="qcmd" onclick="runCmd('agentos status')">agentos status</button>
+        <button class="qcmd" onclick="runCmd('agentos users list')">users list</button>
+        <button class="qcmd" onclick="runCmd('agentos voucher create 1Day')">voucher create 1Day</button>
+        <button class="qcmd" onclick="runCmd('agentos network ping 8.8.8.8')">ping 8.8.8.8</button>
+        <button class="qcmd" onclick="runCmd('agentos doctor')">doctor</button>
+        <button class="qcmd" onclick="runCmd('agentos gateway --daemon')">gateway --daemon</button>
+        <button class="qcmd" onclick="runCmd('agentos users kick john')">kick john</button>
+        <button class="qcmd" onclick="runCmd('agentos voucher stats')">voucher stats</button>
+        <button class="qcmd" onclick="runCmd('agentos network firewall')">firewall</button>
+        <button class="qcmd" onclick="runCmd('help')">help</button>
+      </div>
+
+      <div class="terminal">
+        <div class="terminal-bar">
+          <div class="terminal-dot r"></div>
+          <div class="terminal-dot y"></div>
+          <div class="terminal-dot g"></div>
+          <div class="terminal-title">AgentOS — Terminal</div>
+        </div>
+        <div class="terminal-output" id="termOut">
+          <div class="t-line"><span class="t-ok">AgentOS v2026.5.2</span> — Network Intelligence Platform</div>
+          <div class="t-line"><span class="t-dim">Connected to MikroTik @ 192.168.88.1</span></div>
+          <div class="t-line"><span class="t-dim">AI Engine: Gemini 2.5 Flash · ReAct 5T</span></div>
+          <div class="t-line">&nbsp;</div>
+          <div class="t-line"><span class="t-dim">Type a command or click a quick command above.</span></div>
+          <div class="t-line"><span class="t-dim">Type <span style="color:var(--green)">help</span> for command list.</span></div>
+          <div class="t-line">&nbsp;</div>
+        </div>
+        <div class="terminal-input-row">
+          <div class="t-prompt-label">br3eze@agentos:~$</div>
+          <input type="text" class="terminal-input" id="termInput" placeholder="enter command..." onkeydown="handleTermKey(event)">
+          <button class="run-btn" onclick="runCmd(document.getElementById('termInput').value)">RUN</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- DEBUG PANEL -->
+    <div id="panel-debug" class="panel">
+      <div class="section-title">DEBUG LOG — AGENTOS CODEBASE AUDIT</div>
+
+      <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
+        <div class="stat"><div class="stat-value" style="color:var(--red)">3</div><div class="stat-label">CRITICAL</div></div>
+        <div class="stat"><div class="stat-value" style="color:var(--amber)">5</div><div class="stat-label">HIGH</div></div>
+        <div class="stat"><div class="stat-value" style="color:var(--green)">8</div><div class="stat-label">FIXED</div></div>
+        <div class="stat"><div class="stat-value" style="color:var(--cyan)">4</div><div class="stat-label">INFO</div></div>
+      </div>
+
+      <div id="debugList"></div>
+    </div>
+
+    <!-- ARCHITECTURE PANEL -->
+    <div id="panel-arch" class="panel">
+      <div class="section-title">SYSTEM ARCHITECTURE</div>
+
+      <div class="card">
+        <div class="card-title">DATA FLOW</div>
+        <div class="arch-diagram">
+<pre style="color:var(--text);font-size:0.78rem;line-height:1.9;">
+  ┌────────────────────────────────────────────────────┐
+  │              <span style="color:var(--cyan)">INBOUND CHANNELS</span>                     │
+  │                                                    │
+  │  ┌──────────┐  ┌──────────┐  ┌──────┐  ┌──────┐  │
+  │  │<span style="color:var(--cyan)"> Telegram </span>│  │<span style="color:var(--cyan)">WhatsApp  </span>│  │<span style="color:var(--cyan)"> WS   </span>│  │<span style="color:var(--cyan)"> REST </span>│  │
+  │  │   Bot    │  │ (Baileys)│  │ CLI  │  │  API │  │
+  │  └─────┬────┘  └────┬─────┘  └──┬───┘  └──┬───┘  │
+  └────────┼────────────┼───────────┼──────────┼──────┘
+           └────────────┴───────────┴──────────┘
+                                │
+           ┌────────────────────▼────────────────────┐
+           │             <span style="color:var(--amber)">AGENTOS CORE</span>                 │
+           │                                         │
+           │  ┌─────────────────────────────────┐    │
+           │  │    <span style="color:var(--green)">AskEngine</span> (ReAct Loop)        │    │
+           │  │    Gemini 2.5 Flash · 5 turns   │    │
+           │  └──────────────┬──────────────────┘    │
+           │  ┌──────────────┼──────────────────┐    │
+           │  │<span style="color:var(--cyan)">AgentMemory</span>   │<span style="color:var(--cyan)">NodeRegistry</span>       │    │
+           │  │<span style="color:var(--cyan)">SkillRegistry</span> │<span style="color:var(--cyan)">HookRegistry</span>       │    │
+           │  └──────────────┼──────────────────┘    │
+           └─────────────────┼───────────────────────┘
+                             │
+        ┌────────────────────┼────────────────────┐
+        │                    │                    │
+   ┌────▼────────┐    ┌──────▼──────┐    ┌───────▼──────┐
+   │<span style="color:var(--cyan)">MikroTik Mgr</span> │    │<span style="color:var(--green)"> Database   </span>│    │<span style="color:var(--amber)">Payment GW  </span>│
+   │routeros-cli │    │Firebase /   │    │Mastercard  │
+   │RouterOS v7  │    │Local JSON   │    │A2A OAuth1a │
+   └────┬────────┘    └──────┬──────┘    └────────────┘
+        │                    │
+   ┌────▼────────┐    ┌──────▼──────┐
+   │<span style="color:var(--cyan)">MikroTik Rtr</span> │    │<span style="color:var(--green)">Firestore   </span>│
+   │192.168.88.1 │    │Collections  │
+   │+ Sentinel   │    └─────────────┘
+   │  .rsc Agent │
+   └─────────────┘
+</pre>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">MODULE MAP</div>
+        <table>
+          <thead><tr><th>MODULE</th><th>FILE</th><th>ROLE</th></tr></thead>
+          <tbody>
+            <tr><td>Core Entry</td><td class="mono">agentos.mjs</td><td>Boot sequence, ESM entry</td></tr>
+            <tr><td>CLI Entry</td><td class="mono">bin/agentos.js</td><td>Commander.js CLI</td></tr>
+            <tr><td>Gateway</td><td class="mono">server/gateway.js</td><td>WebSocket + HTTP server</td></tr>
+            <tr><td>MikroTik Mgr</td><td class="mono">src/core/mikrotik.js</td><td>RouterOS API adapter</td></tr>
+            <tr><td>AI Engine</td><td class="mono">agents/ask-engine.js</td><td>Gemini ReAct loop</td></tr>
+            <tr><td>Database</td><td class="mono">src/core/database.js</td><td>Firebase / local JSON</td></tr>
+            <tr><td>Billing</td><td class="mono">services/billing.js</td><td>Voucher + payment</td></tr>
+            <tr><td>Sentinel</td><td class="mono">agentos-sentinel.rsc</td><td>On-router native agent</td></tr>
+            <tr><td>AgentOSKit</td><td class="mono">apps/shared/AgentOSKit/</td><td>Shared SDK</td></tr>
+            <tr><td>Cordova Plugin</td><td class="mono">custom-plugins/cordova-plugin-aicore/</td><td>Native AI bridge</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="card-title">ROUTEROS SENTINEL FLOW</div>
+        <div style="background:#000;padding:16px;border:1px solid var(--border);font-size:0.78rem;line-height:2;font-family:'Share Tech Mono',monospace;">
+          <div><span style="color:var(--dim)"># On-router scheduler polls Telegram</span></div>
+          <div><span style="color:var(--amber)">/system/scheduler</span> → <span style="color:var(--green)">on-event</span></div>
+          <div style="padding-left:24px;color:var(--text)">→ Build URL string (no /log, use :log)</div>
+          <div style="padding-left:24px;color:var(--text)">→ :do { /tool/fetch url=$url } on-error { :log error $err }</div>
+          <div style="padding-left:24px;color:var(--text)">→ Parse response JSON</div>
+          <div style="padding-left:24px;color:var(--text)">→ Match command against allowlist</div>
+          <div style="padding-left:24px;color:var(--text)">→ Execute via /system/script (NOT ssh-exec)</div>
+          <div style="padding-left:24px;color:var(--text)">→ Send reply via :do { /tool/fetch url=$replyUrl }</div>
+          <div>&nbsp;</div>
+          <div><span style="color:var(--dim)"># Critical conventions</span></div>
+          <div><span style="color:var(--green)">✓</span> Spaces encoded as <span style="color:var(--amber)">+</span> in Telegram URLs</div>
+          <div><span style="color:var(--green)">✓</span> on-event built as concatenated string variable</div>
+          <div><span style="color:var(--green)">✓</span> All router access wrapped in :do/on-error</div>
+          <div><span style="color:var(--red)">✗</span> Never use /log (use :log)</div>
+          <div><span style="color:var(--red)">✗</span> Never use ssh-exec</div>
+          <div><span style="color:var(--red)">✗</span> Never omit $ sigil on variables</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ─── DATA ───────────────────────────────────────────────────────────────────
+
+const COMMANDS = [
+  { name:'agentos', sub:'onboard', desc:'Interactive setup wizard — configures MikroTik, Telegram, Gemini, Firebase', syntax:'agentos onboard', tags:['system'], tg:null },
+  { name:'agentos', sub:'status', desc:'Quick system overview — router, AI engine, gateway, DB connection', syntax:'agentos status', tags:['system'], tg:'/status' },
+  { name:'agentos', sub:'doctor', desc:'Health check all subsystems. Use --fix to auto-repair common issues', syntax:'agentos doctor [--fix]', tags:['system'], tg:null },
+  { name:'agentos', sub:'gateway', desc:'Start the WebSocket + Telegram + WhatsApp gateway', syntax:'agentos gateway [--daemon] [--force]', tags:['system'], tg:null },
+  { name:'agentos', sub:'gateway:stop', desc:'Graceful shutdown of running gateway daemon', syntax:'agentos gateway:stop', tags:['system'], tg:null },
+  { name:'agentos', sub:'network ping', desc:'Ping a host through the MikroTik router ICMP', syntax:'agentos network ping <host>', tags:['network'], tg:'/ping' },
+  { name:'agentos', sub:'network scan', desc:'Scan DHCP leases — lists all connected clients', syntax:'agentos network scan', tags:['network'], tg:null },
+  { name:'agentos', sub:'network firewall', desc:'List all firewall filter rules on the router', syntax:'agentos network firewall', tags:['network'], tg:'/firewall' },
+  { name:'agentos', sub:'network block', desc:'Add a firewall DROP rule for an IP or MAC address', syntax:'agentos network block <ip|mac>', tags:['network'], tg:null },
+  { name:'agentos', sub:'network unblock', desc:'Remove a firewall DROP rule for an IP or MAC address', syntax:'agentos network unblock <ip|mac>', tags:['network'], tg:null },
+  { name:'agentos', sub:'users list', desc:'List active hotspot users. Use --all for all users including offline', syntax:'agentos users list [--all]', tags:['users'], tg:'/users' },
+  { name:'agentos', sub:'users kick', desc:'Disconnect a hotspot user by username', syntax:'agentos users kick <username>', tags:['users'], tg:'/kick' },
+  { name:'agentos', sub:'users add', desc:'Create a new hotspot user with optional profile assignment', syntax:'agentos users add <username>', tags:['users'], tg:null },
+  { name:'agentos', sub:'users remove', desc:'Permanently delete a hotspot user from the router', syntax:'agentos users remove <username>', tags:['users'], tg:null },
+  { name:'agentos', sub:'users status', desc:'Check if a user is online, their data usage and time remaining', syntax:'agentos users status <username>', tags:['users'], tg:null },
+  { name:'agentos', sub:'voucher create', desc:'Generate a WiFi voucher for a billing plan (1Day/7Day/30Day)', syntax:'agentos voucher create [1Day|7Day|30Day]', tags:['voucher'], tg:'/voucher' },
+  { name:'agentos', sub:'voucher list', desc:'List recently generated vouchers with redemption status', syntax:'agentos voucher list', tags:['voucher'], tg:null },
+  { name:'agentos', sub:'voucher revoke', desc:'Revoke and delete an unused voucher by code', syntax:'agentos voucher revoke <code>', tags:['voucher'], tg:null },
+  { name:'agentos', sub:'voucher stats', desc:'Revenue and usage statistics for voucher billing', syntax:'agentos voucher stats', tags:['voucher'], tg:'/stats' },
+  { name:'agentos', sub:'config get', desc:'Read a configuration value by dot-path', syntax:'agentos config get <path>', tags:['config'], tg:null },
+  { name:'agentos', sub:'config set', desc:'Write a configuration value by dot-path', syntax:'agentos config set <path> <value>', tags:['config'], tg:null },
+  { name:'agentos', sub:'config show', desc:'Display the full active configuration', syntax:'agentos config show', tags:['config'], tg:null },
+  { name:'agentos', sub:'config edit', desc:'Open configuration in $EDITOR', syntax:'agentos config edit', tags:['config'], tg:null },
+  { name:'/start', sub:'', desc:'Authenticate with the Telegram bot and display main menu', syntax:'/start', tags:['telegram'], tg:'/start' },
+  { name:'/help', sub:'', desc:'Show all available Telegram bot commands', syntax:'/help', tags:['telegram'], tg:'/help' },
+  { name:'/status', sub:'', desc:'Router status: uptime, CPU, memory, connected users count', syntax:'/status', tags:['telegram'], tg:'/status' },
+  { name:'/users', sub:'', desc:'List active hotspot users with inline kick buttons', syntax:'/users', tags:['telegram'], tg:'/users' },
+  { name:'/voucher', sub:'', desc:'Open voucher creation menu with plan selector', syntax:'/voucher', tags:['telegram'], tg:'/voucher' },
+  { name:'/kick', sub:'', desc:'Kick a user by name via Telegram', syntax:'/kick <username>', tags:['telegram'], tg:'/kick' },
+  { name:'/stats', sub:'', desc:'Network traffic and billing revenue statistics', syntax:'/stats', tags:['telegram'], tg:'/stats' },
+];
+
+const DEBUG_ITEMS = [
+  {
+    id:'BUG-001', severity:'fixed',
+    title:'ssh-exec misuse in RouterOS scripting',
+    body:`<code>/system/ssh-exec</code> does not exist in RouterOS v7 API context. Used to execute commands but fails silently or throws. <strong>Fix:</strong> replaced with upsert-and-exec pattern via <code class="fix">/system/script</code> — add or replace the script body, then run it with <code class="fix">/system/script/run</code>.`,
+    file:'agentos-sentinel.rsc, src/core/mikrotik.js'
+  },
+  {
+    id:'BUG-002', severity:'fixed',
+    title:'Missing $ sigil on $sender variable in Telegram handler',
+    body:`RouterOS scheduler on-event code referenced <code>sender</code> instead of <code>$sender</code>, causing a nil/undefined value silently. All variable references in RouterOS scripting require the <code class="fix">$</code> prefix. Fixed across all .rsc files.`,
+    file:'agentos-sentinel.rsc'
+  },
+  {
+    id:'BUG-003', severity:'fixed',
+    title:':toarr typo — RouterOS function is :toarray',
+    body:`RouterOS built-in function is <code>:toarray</code> not <code>:toarr</code>. The typo caused parse errors on any code path that tried to split command arguments. Fixed to <code class="fix">:toarray</code> throughout.`,
+    file:'agentos-sentinel.rsc'
+  },
+  {
+    id:'BUG-004', severity:'fixed',
+    title:'on-event script must be a concatenated string variable',
+    body:`RouterOS scheduler <code>on-event</code> value cannot span multiple lines as a literal block. It must be built as a single string variable and assigned. All scheduler creation code updated to use <code class="fix">:local script "..."; /system/scheduler set on-event=$script</code> pattern.`,
+    file:'agentos-sentinel.rsc'
+  },
+  {
+    id:'BUG-005', severity:'fixed',
+    title:'Telegram URL spaces must be encoded as + not %20',
+    body:`RouterOS <code>/tool/fetch</code> URL builder was using <code>%20</code> for spaces in Telegram message text. RouterOS requires spaces in query strings to be encoded as <code class="fix">+</code>. Fixed in URL construction helper.`,
+    file:'agentos-sentinel.rsc'
+  },
+  {
+    id:'BUG-006', severity:'fixed',
+    title:'webhook body-parser conflict with Express JSON middleware',
+    body:`Telegram webhook and internal REST API both used <code>express.json()</code> globally, causing double-parsing and payload corruption on webhook endpoint. Fixed by applying body-parser selectively — raw buffer for webhook route, JSON for API routes.`,
+    file:'server/gateway.js'
+  },
+  {
+    id:'BUG-007', severity:'fixed',
+    title:'WebSocketCLI missing commands — kick, voucher, network not routed',
+    body:`WebSocket CLI command dispatcher had routes for <code>status</code> and <code>users</code> but missing handlers for <code>kick</code>, <code>voucher create</code>, and <code>network ping</code>. Added all missing command routes to WSS dispatch table.`,
+    file:'server/gateway.js, src/cli/'
+  },
+  {
+    id:'BUG-008', severity:'fixed',
+    title:'Firebase hardening — missing error handling on Firestore writes',
+    body:`Firestore write operations lacked try/catch, causing unhandled promise rejections that crashed the gateway process. All DB write paths now wrapped with proper error handling and fallback to local JSON store.`,
+    file:'src/core/database.js'
+  },
+  {
+    id:'SEC-001', severity:'critical',
+    title:'[SECURITY] No command allowlist — arbitrary RCE via Telegram',
+    body:`The RouterOS Sentinel agent executed any command string received from Telegram without validation. An attacker with access to the bot could send arbitrary RouterOS commands. <strong>Fix required:</strong> implement a strict allowlist — only pre-approved command tokens (<code class="fix">kick</code>, <code class="fix">status</code>, <code class="fix">users</code>, etc.) should be dispatched. Reject all others with error reply.`,
+    file:'agentos-sentinel.rsc'
+  },
+  {
+    id:'SEC-002', severity:'critical',
+    title:'[SECURITY] Missing HTTPS certificate validation on /tool/fetch',
+    body:`RouterOS <code>/tool/fetch</code> calls to AgentOS webhook endpoint used <code>check-certificate=no</code>, disabling TLS certificate validation. This opens a MITM attack vector. <strong>Fix:</strong> set <code class="fix">check-certificate=yes</code> and ensure server presents a valid cert. Use Let's Encrypt or self-signed with CA import.`,
+    file:'agentos-sentinel.rsc'
+  },
+  {
+    id:'SEC-003', severity:'critical',
+    title:'[SECURITY] Telegram chat ID not validated — bot responds to anyone',
+    body:`Sentinel agent was not validating that incoming Telegram updates came from the authorised admin <code>TELEGRAM_ADMIN_CHAT_ID</code>. Any Telegram user who found the bot could issue commands. <strong>Fix:</strong> compare <code>$chatId</code> against whitelisted IDs before any dispatch.`,
+    file:'agentos-sentinel.rsc'
+  },
+  {
+    id:'WARN-001', severity:'high',
+    title:'RouterOS API path errors — wrong /ip/hotspot/active path',
+    body:`Code referenced <code>/ip hotspot active</code> (with space, older syntax) instead of the v7 API path <code class="fix">/ip/hotspot/active</code>. Also affected: <code>/ip/hotspot/user</code> and <code>/system/resource</code>. All paths updated to v7 REST-style format.`,
+    file:'src/core/mikrotik.js'
+  },
+  {
+    id:'WARN-002', severity:'high',
+    title:'Rate limiting not applied to Telegram webhook endpoint',
+    body:`The Telegram webhook route had no rate limiting, allowing flood attacks. Express <code>express-rate-limit</code> was applied only to REST API routes. Fix: apply separate rate limiter to <code>/webhook</code> route with conservative limits.`,
+    file:'server/gateway.js'
+  },
+  {
+    id:'WARN-003', severity:'high',
+    title:'Gemini ReAct loop — no max-turn guard on infinite tool loops',
+    body:`The AskEngine ReAct loop had a 5-turn depth configuration but the guard condition was checked after tool call, not before. Edge case: if tool always returns an action, loop could exceed depth. Fix: enforce turn count check at loop entry.`,
+    file:'agents/ask-engine.js'
+  },
+  {
+    id:'WARN-004', severity:'high',
+    title:'Mastercard A2A OAuth nonce not cryptographically random',
+    body:`OAuth 1.0a nonce was generated with <code>Math.random()</code> — not cryptographically secure. Fix: replace with <code class="fix">crypto.randomBytes(16).toString('hex')</code> for proper OAuth nonce generation.`,
+    file:'services/billing.js'
+  },
+  {
+    id:'INFO-001', severity:'info',
+    title:'Dual-limit voucher expiry — confirm both params sent to MikroTik',
+    body:`Billing plans expire at whichever comes first: time or data quota. Confirm that both <code>session-time-limit</code> AND <code>limit-bytes-total</code> are set on every hotspot user created via voucher. Check <code>users.add</code> tool implementation.`,
+    file:'services/billing.js, src/core/mikrotik.js'
+  },
+  {
+    id:'INFO-002', severity:'info',
+    title:'Scheduler policies — avoid write/policy/sensitive grants',
+    body:`RouterOS scheduler jobs should only be granted <code>read</code> + <code>test</code> + <code>api</code> policies where possible. Avoid granting <code>write</code> or <code>policy</code> unless strictly required. Audit scheduler policy grants.`,
+    file:'agentos-sentinel.rsc'
+  },
+  {
+    id:'INFO-003', severity:'info',
+    title:'Local JSON fallback — file locking not implemented',
+    body:`The local JSON database fallback (when Firebase is unavailable) uses synchronous read/write without file locking. Under concurrent requests, writes may race. Consider using a write queue or SQLite for local persistence.`,
+    file:'src/core/database.js'
+  },
+  {
+    id:'INFO-004', severity:'info',
+    title:'CVE-2026-1526 — patched, document exact mitigation',
+    body:`README references CVE-2026-1526 as patched but does not document what the vulnerability was or the exact fix applied. Add a SECURITY.md or inline comment describing the affected code path and the applied mitigation for audit purposes.`,
+    file:'SECURITY.md (missing)'
+  },
+];
+
+// ─── RENDER COMMANDS ────────────────────────────────────────────────────────
+
+function renderCmds(filter = 'all') {
+  const grid = document.getElementById('cmdGrid');
+  const items = filter === 'all' ? COMMANDS : COMMANDS.filter(c => c.tags.includes(filter));
+  grid.innerHTML = items.map(c => `
+    <div class="cmd-card" onclick="loadCmd('${c.syntax.replace(/'/g,"\\'")}')">
+      <div class="cmd-name">${c.sub ? `<span>${c.name}</span> <span class="sub">${c.sub}</span>` : `<span>${c.name}</span>`}</div>
+      <div class="cmd-desc">${c.desc}</div>
+      <div class="cmd-syntax">${c.syntax}</div>
+      <div class="cmd-tags">
+        ${c.tags.map(t => `<span class="tag">${t.toUpperCase()}</span>`).join('')}
+        ${c.tg ? `<span class="tag" style="border-color:rgba(0,212,255,0.3);color:var(--cyan)">TG: ${c.tg}</span>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function filterCmds(f) { renderCmds(f); }
+
+function loadCmd(syntax) {
+  showPanel('terminal', null);
+  document.getElementById('termInput').value = syntax;
+}
+
+// ─── RENDER DEBUG ───────────────────────────────────────────────────────────
+
+function renderDebug() {
+  const list = document.getElementById('debugList');
+  list.innerHTML = DEBUG_ITEMS.map(d => `
+    <div class="debug-item ${d.severity === 'fixed' ? 'fixed' : d.severity === 'info' ? 'info' : d.severity === 'high' ? 'warn' : ''}">
+      <div class="debug-header">
+        <span class="debug-id">${d.id}</span>
+        <span class="severity ${d.severity === 'fixed' ? 'fixed' : d.severity === 'info' ? 'info' : d.severity === 'high' ? 'high' : 'critical'}">
+          ${d.severity.toUpperCase()}
+        </span>
+      </div>
+      <div class="debug-title">${d.title}</div>
+      <div class="debug-body">${d.body}</div>
+      <div class="debug-file">📁 ${d.file}</div>
+    </div>
+  `).join('');
+}
+
+// ─── TERMINAL SIMULATOR ─────────────────────────────────────────────────────
+
+const CMD_RESPONSES = {
+  'agentos status': [
+    { t:'ok', v:'═══ AgentOS Status ════════════════════════' },
+    { t:'out', v:'' },
+    { t:'out', v:'  Gateway        ● ONLINE  (ws:4000)' },
+    { t:'out', v:'  MikroTik       ● ONLINE  (192.168.88.1)' },
+    { t:'out', v:'  AI Engine      ● ONLINE  (Gemini 2.5)' },
+    { t:'out', v:'  Telegram Bot   ● ONLINE' },
+    { t:'out', v:'  WhatsApp       ● ONLINE  (Baileys)' },
+    { t:'out', v:'  Firebase       ● ONLINE' },
+    { t:'out', v:'' },
+    { t:'val', v:'  Router Uptime  → 14d 6h 22m' },
+    { t:'val', v:'  CPU Load       → 12%' },
+    { t:'val', v:'  Free Memory    → 48.2 MB' },
+    { t:'val', v:'  Active Users   → 7' },
+  ],
+  'agentos users list': [
+    { t:'ok', v:'═══ Active Hotspot Users (7) ══════════════' },
+    { t:'out', v:'' },
+    { t:'val', v:'  USERNAME      IP              UPTIME   USAGE' },
+    { t:'dim', v:'  ─────────────────────────────────────────' },
+    { t:'out', v:'  john          192.168.88.10   2h 14m   342 MB' },
+    { t:'out', v:'  maria         192.168.88.11   45m      89 MB' },
+    { t:'out', v:'  guest_001     192.168.88.15   8m       12 MB' },
+    { t:'out', v:'  guest_002     192.168.88.16   1h 2m    203 MB' },
+    { t:'out', v:'  peter_30d     192.168.88.20   3d 4h    8.1 GB' },
+    { t:'out', v:'  alice         192.168.88.21   12m      28 MB' },
+    { t:'out', v:'  bob_7d        192.168.88.22   6h 44m   1.2 GB' },
+  ],
+  'agentos voucher create 1Day': [
+    { t:'ok', v:'Generating 1Day voucher...' },
+    { t:'dim', v:'→ Creating hotspot user...' },
+    { t:'dim', v:'→ Setting limit-bytes-total: 1073741824' },
+    { t:'dim', v:'→ Setting session-time-limit: 1d' },
+    { t:'dim', v:'→ Saving to Firebase...' },
+    { t:'out', v:'' },
+    { t:'ok', v:'═══ Voucher Created ═══════════════════════' },
+    { t:'val', v:'  Code    → BR3Z-4K9X-7M2P' },
+    { t:'val', v:'  Plan    → 1Day / 1GB' },
+    { t:'val', v:'  Expires → Time or Data (first wins)' },
+    { t:'ok',  v:'  Status  → READY' },
+  ],
+  'agentos network ping 8.8.8.8': [
+    { t:'ok', v:'Pinging 8.8.8.8 via MikroTik...' },
+    { t:'out', v:'  64 bytes from 8.8.8.8: seq=0 ttl=117 time=14.2 ms' },
+    { t:'out', v:'  64 bytes from 8.8.8.8: seq=1 ttl=117 time=13.8 ms' },
+    { t:'out', v:'  64 bytes from 8.8.8.8: seq=2 ttl=117 time=14.1 ms' },
+    { t:'out', v:'  64 bytes from 8.8.8.8: seq=3 ttl=117 time=14.4 ms' },
+    { t:'out', v:'' },
+    { t:'ok', v:'  4 packets: 0% loss, avg 14.1ms' },
+  ],
+  'agentos doctor': [
+    { t:'ok', v:'═══ AgentOS Doctor ════════════════════════' },
+    { t:'out', v:'' },
+    { t:'ok',  v:'  ✓ Node.js version: 20.14.0' },
+    { t:'ok',  v:'  ✓ MikroTik connection: OK' },
+    { t:'ok',  v:'  ✓ Telegram bot: authenticated' },
+    { t:'ok',  v:'  ✓ Gemini API: reachable' },
+    { t:'ok',  v:'  ✓ Firebase: connected' },
+    { t:'ok',  v:'  ✓ Webhook endpoint: responding' },
+    { t:'warn',v:'  ⚠ WhatsApp: not authenticated (run /wa-auth)' },
+    { t:'ok',  v:'' },
+    { t:'ok',  v:'  7/8 checks passed' },
+  ],
+  'agentos gateway --daemon': [
+    { t:'dim', v:'Starting AgentOS gateway in daemon mode...' },
+    { t:'out', v:'  → WebSocket server: :4000' },
+    { t:'out', v:'  → HTTP API: :3000' },
+    { t:'out', v:'  → Telegram webhook: registered' },
+    { t:'out', v:'  → WhatsApp: connecting...' },
+    { t:'ok',  v:'  ● Gateway running (PID: 28471)' },
+    { t:'dim', v:'  Logs: tail -f logs/agentos.log' },
+  ],
+  'agentos users kick john': [
+    { t:'dim', v:'Kicking user: john...' },
+    { t:'ok',  v:'✓ john disconnected from hotspot' },
+    { t:'dim', v:'Session removed from MikroTik active list' },
+  ],
+  'agentos voucher stats': [
+    { t:'ok', v:'═══ Voucher Statistics ════════════════════' },
+    { t:'out', v:'' },
+    { t:'val', v:'  Today:    12 vouchers sold' },
+    { t:'val', v:'  This week: 84 vouchers sold' },
+    { t:'val', v:'  Revenue:   $42.00 USD (est)' },
+    { t:'out', v:'' },
+    { t:'out', v:'  Plan breakdown:' },
+    { t:'out', v:'  1Day  → 48 (57%)' },
+    { t:'out', v:'  7Day  → 28 (33%)' },
+    { t:'out', v:'  30Day →  8 (10%)' },
+  ],
+  'agentos network firewall': [
+    { t:'ok', v:'═══ Firewall Filter Rules ═════════════════' },
+    { t:'dim', v:'  #  CHAIN    ACTION  SRC-ADDRESS' },
+    { t:'dim', v:'  ──────────────────────────────────────' },
+    { t:'out', v:'  0  forward  accept  192.168.88.0/24' },
+    { t:'out', v:'  1  forward  drop    10.0.0.5' },
+    { t:'out', v:'  2  input    accept  established' },
+    { t:'out', v:'  3  input    drop    !admin' },
+  ],
+  'help': [
+    { t:'ok', v:'═══ AgentOS Commands ══════════════════════' },
+    { t:'out', v:'' },
+    { t:'val', v:'  SYSTEM' },
+    { t:'out', v:'  onboard · status · doctor · gateway' },
+    { t:'out', v:'' },
+    { t:'val', v:'  NETWORK' },
+    { t:'out', v:'  net ping · net scan · net firewall · net block' },
+    { t:'out', v:'' },
+    { t:'val', v:'  USERS' },
+    { t:'out', v:'  users list · users kick · users add · users status' },
+    { t:'out', v:'' },
+    { t:'val', v:'  VOUCHER' },
+    { t:'out', v:'  voucher create · voucher list · voucher stats' },
+    { t:'out', v:'' },
+    { t:'val', v:'  CONFIG' },
+    { t:'out', v:'  config get · config set · config show' },
+  ],
+};
+
+function appendLine(cls, text) {
+  const out = document.getElementById('termOut');
+  const div = document.createElement('div');
+  div.className = 't-line';
+  div.innerHTML = `<span class="t-${cls}">${text}</span>`;
+  out.appendChild(div);
+  out.scrollTop = out.scrollHeight;
+}
+
+function runCmd(cmd) {
+  const input = document.getElementById('termInput');
+  input.value = '';
+  if (!cmd.trim()) return;
+
+  appendLine('dim', '');
+  appendLine('prompt', `br3eze@agentos:~$ <span class="t-cmd">${cmd}</span>`);
+
+  const key = cmd.trim().toLowerCase();
+  const resp = CMD_RESPONSES[key];
+
+  if (resp) {
+    setTimeout(() => {
+      resp.forEach((line, i) => {
+        setTimeout(() => appendLine(line.t, line.v), i * 60);
+      });
+    }, 200);
+  } else {
+    setTimeout(() => {
+      appendLine('dim', 'Sending to AgentOS AI...');
+      setTimeout(() => {
+        appendLine('ok', `[AI] Command recognized: "${cmd}"`);
+        appendLine('out', 'Processing via Gemini 2.5 ReAct engine...');
+        appendLine('warn', 'Note: This is a simulator. Deploy AgentOS for real execution.');
+      }, 800);
+    }, 300);
+  }
+}
+
+function handleTermKey(e) {
+  if (e.key === 'Enter') runCmd(document.getElementById('termInput').value);
+}
+
+// ─── NAVIGATION ─────────────────────────────────────────────────────────────
+
+function showPanel(id, tabEl) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  if (tabEl) {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    tabEl.classList.add('active');
+  }
+}
+
+function setActive(el) {
+  document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function setFilterActive(el) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function filterSidebar(q) {
+  const links = document.querySelectorAll('.sidebar-link');
+  links.forEach(l => {
+    l.style.display = l.textContent.toLowerCase().includes(q.toLowerCase()) ? 'block' : 'none';
+  });
+}
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+
+renderCmds('all');
+renderDebug();
+</script>
+</body>
+</html>
