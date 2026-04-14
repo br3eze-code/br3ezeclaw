@@ -31,10 +31,16 @@
 
 Managing MikroTik routers shouldn't require memorizing CLI commands or keeping WinBox open 24/7. AgentOS brings **conversational AI** to network administration — control your infrastructure through natural language on your favorite messaging platform.
 
-### The Problem
-1.Traditional: Open WinBox → Navigate to IP → Hotspot → Active → Find User → Click Kick
+### The Problem AgentOS Solves
+Managing community WiFi infrastructure across multiple MikroTik nodes is painful. WinBox requires a desktop. RouterOS CLI requires memorizing commands. Hotspot billing requires manual voucher generation. Payment collection is disconnected from provisioning.
+AgentOS collapses this into one intelligent agent you control from Telegram.
 
-2AgentOS:    Send "kick john" in Telegram → Done in 2 seconds
+Before AgentOS:                    After AgentOS:
+─────────────────                  ──────────────
+Open WinBox          ──┐           Send "kick john"
+Navigate menus         │    →      ✅ Done in 2 seconds
+Find user              │
+Right-click → Kick   ──┘
 
 ---
 
@@ -45,10 +51,10 @@ Managing MikroTik routers shouldn't require memorizing CLI commands or keeping W
 <td width="50%">
 
 ### 🤖 AI Coordinator
-- **Natural language router management via Gemini 2.5 Flash
-- **ReAct reasoning engine with 5-turn depth
-- **Context-aware command suggestions and error recovery
-- **AgentMemory for persistent session state
+- Natural language router management via Gemini 2.5 Flash
+- ReAct reasoning engine with 5-turn depth
+- Context-aware command suggestions and error recovery
+- AgentMemory for persistent session state
 
 </td>
 <td width="50%">
@@ -233,29 +239,36 @@ tail -f logs/agentos.log
                     └─────────────────┘
 ```
 ```bash
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Telegram Bot  │     │  WhatsApp (WA)  │     │  WebSocket CLI  │
-│   (node-telegram) │     │   (Baileys)     │     │   (Browser)     │
-└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                                 │
-                    ┌────────────▼────────────┐
-                    │      AgentOS Core       │
-                    │  ┌─────────────────┐    │
-                    │  │  AskEngine (AI) │    │
-                    │  │  Gemini 2.5 Flash│   │
-                    │  └─────────────────┘    │
-                    │  ┌─────────────────┐    │
-                    │  │  Node Registry  │    │
-                    │  │  (Multi-router) │    │
-                    │  └─────────────────┘    │
-                    └────────────┬────────────┘
-                                 │
-                    ┌────────────▼────────────┐
-                    │    MikroTik Manager     │
-                    │   (routeros-client)     │
-                    └─────────────────────────┘
+┌──────────────────────────────────┐
+                    │         Inbound Channels          │
+                    │  Telegram │ WhatsApp │ REST │ WS  │
+                    └────────────────┬─────────────────┘
+                                     │
+                    ┌────────────────▼─────────────────┐
+                    │           AgentOS Core            │
+                    │  ┌──────────────────────────────┐ │
+                    │  │     AskEngine (ReAct Loop)   │ │
+                    │  │     Gemini 2.5 Flash · 5T    │ │
+                    │  └──────────────┬───────────────┘ │
+                    │  ┌─────────────▼───────────────┐  │
+                    │  │  AgentMemory │ NodeRegistry  │  │
+                    │  │  SkillRegistry │ HookRegistry│  │
+                    │  └─────────────┬───────────────┘  │
+                    └────────────────┼─────────────────┘
+                                     │
+              ┌──────────────────────┼──────────────────────┐
+              │                      │                       │
+   ┌──────────▼──────────┐  ┌───────▼────────┐  ┌──────────▼────────┐
+   │   MikroTik Manager  │  │    Database    │  │  Payment Gateway  │
+   │  routeros-client    │  │  Firebase /    │  │  Mastercard A2A   │
+   │  RouterOS API v7    │  │  Local JSON    │  │  OAuth 1.0a RSA   │
+   └──────────┬──────────┘  └───────┬────────┘  └───────────────────┘
+              │                     │
+   ┌──────────▼──────────┐  ┌───────▼────────┐
+   │   MikroTik Router   │  │   Firestore    │
+   │   192.168.88.1      │  │   Collections  │
+   │   + Sentinel .rsc   │  └────────────────┘
+   └─────────────────────┘
 ```
 Repository Structure
 ```
@@ -289,43 +302,51 @@ br3eze-code/
 ## Command Line Interface Tree
 ```
 agentos
-├── onboard              Interactive setup wizard
-├── gateway              Run WebSocket gateway
-│   ├── (default)        Run in foreground
-│   ├── --daemon         Run as service
-│   └── --force          Kill existing process
-├── gateway:status       Check if running
-├── gateway:stop         Stop service
-├── network (net)        Network tools
-│   ├── ping <host>      Ping test
-│   ├── scan             DHCP scan
-│   ├── firewall         Show rules
-│   ├── block <target>   Block address
-│   └── unblock <target> Unblock address
-├── users (user)         User management
-│   ├── list             List users (--all for all)
-│   ├── kick <user>      Disconnect user
-│   ├── add <user>       Create user
-│   ├── remove <user>    Delete user
-│   └── status <user>    Check online status
-├── voucher (v)          Voucher management
-│   ├── create [plan]    Generate voucher
-│   ├── list             Show recent
-│   ├── revoke <code>    Delete unused
-│   └── stats            Statistics
-├── config               Configuration
-│   ├── get <path>       Read value
-│   ├── set <path>       Write value
-│   ├── edit             Open in editor
-│   └── show             Display all
-├── doctor               Health check
-│   └── --fix            Auto-repair
-├── status (s)           Quick overview
-├── --version            Show version
-├── --help               Show help
-├── --dev                Development profile
-└── --profile <name>     Named profile
+├── onboard                   Interactive setup wizard
+├── gateway                   WebSocket + Telegram gateway
+│   ├── --daemon              Run as background service
+│   ├── --force               Kill existing process first
+│   └── gateway:stop          Graceful shutdown
+├── status (s)                System overview
+├── doctor [--fix]            Health check + auto-repair
+│
+├── network (net)
+│   ├── ping <host>           ICMP ping via router
+│   ├── scan                  DHCP lease scan
+│   ├── firewall              List firewall rules
+│   ├── block <ip|mac>        Add drop rule
+│   └── unblock <ip|mac>      Remove drop rule
+│
+├── users (user)
+│   ├── list [--all]          Active / all hotspot users
+│   ├── kick <username>       Disconnect user
+│   ├── add <username>        Create hotspot user
+│   ├── remove <username>     Delete user
+│   └── status <username>     Check online + usage
+│
+├── voucher (v)
+│   ├── create [plan]         Generate voucher (1Day|7Day|30Day)
+│   ├── list                  Recent vouchers
+│   ├── revoke <code>         Delete unused voucher
+│   └── stats                 Revenue + usage stats
+│
+└── config
+    ├── get <path>            Read config value
+    ├── set <path> <value>    Write config value
+    ├── edit                  Open in $EDITOR
+    └── show                  Display full config
 ```
+Telegram Commands
+/start      Authenticate and show menu
+/status     Router status overview
+/users      Active user list with kick buttons
+/kick       Kick a user by name
+/voucher    Create voucher with plan selector
+/stats      Network + billing stats
+/ping       Ping a host
+/firewall   Show firewall rules
+/help       Full command list
+
 ## 📖 Full Documentation
 
 - [Installation Guide](docs/install.md)
@@ -340,25 +361,52 @@ agentos
 🛠️ Tech Stack
 | Layer          | Technology                                      |
 | -------------- | ----------------------------------------------- |
+| **Runtime**    | Node.js 20 ESM                                  |
 | **Router API** | MikroTik RouterOS API (routeros-client)         |
-| **AI Engine**  | Google Gemini 2.5 Flash                         |
+| **AI Engine**  | Google Gemini 2.5 Flash (Any Provider)          |
 | **Messaging**  | node-telegram-bot-api + @whiskeysockets/baileys |
-| **Payments**   | Mastercard A2A (Account-to-Account)             |
+| **Payments**   | Mastercard A2A · OAuth 1.0a RSA-SHA256          |
 | **Database**   | Firebase Firestore / Local JSON                 |
 | **Gateway**    | WebSocket (ws) + Express                        |
 | **CLI**        | Commander.js                                    |
-| **Security**   | Helmet, Rate-limit, Joi validation              |
+| **Mobile**     | Apache Cordova (Android/iOS/PWA)                |
+| **Security**   | Helmet, Rate-limit, Joi                         |
+| **Logging**    | Winston                                         |
+
+Deployment
+Docker
+```bash
+docker compose up -d
+```
+Podman
+```bash
+cp agentos.podman.env .env
+podman play kube agentos.yaml
+```
+Manual (Linux systemd)
+```bash
+./install.sh
+systemctl enable agentos
+systemctl start agentos
+```
+RouterOS Sentinel
+```bash
+# Upload via WinBox Files or SCP, then:
+/import file-name=agentos-sentinel.rsc
+# Verify
+/system/scheduler print
+```
 
 🤝 Contributing
 We welcome contributions! Please see CONTRIBUTING.md for guidelines.
 
-Quick Contributions 
+### Quick Contributions 
 
-⭐ Star this repository
-🐛 Report bugs via Issues
-💡 Suggest features via Discussions
-📖 Improve documentation
-🔧 Submit PRs for good first issues
+-⭐ Star this repository
+-🐛 Report bugs via Issues
+-💡 Suggest features via Discussions
+-📖 Improve documentation
+-🔧 Submit PRs for good first issues
 
 📜License
 Apache 2.0 © 2026 Brighton Mzacana · br3eze.africa
@@ -372,7 +420,8 @@ Apache 2.0 © 2026 Brighton Mzacana · br3eze.africa
   </a>
 </p>
 <p align="center">
-  <strong>⭐ Star this repo if it helps you manage your network!</strong></p>
+  <strong>⭐ Star this repo if it helps you manage your network!</strong>
+</p>
 
 <div align="center">
 <sub>Built for Africa's community networks · Powered by AI · Controlled via Telegram</sub>
