@@ -1,0 +1,63 @@
+const fs = require('fs/promises');
+const path = require('path');
+
+const create_agent = {
+  name: "create_agent",
+  description: "Create or update an AgentOS agent. Defines persona, triggers, and allowed skills.",
+  parameters: {
+    type: "object",
+    properties: {
+      name: { type: "string", description: "Agent name, lowercase no spaces, e.g. netwatch" },
+      purpose: { type: "string", description: "What this agent does" },
+      persona: { type: "string", default: "Helpful network operator", description: "Agent personality" },
+      triggers: { type: "string", default: "manual", description: "Comma separated triggers: manual,schedule,alert" },
+      allowed_skills: { type: "string", default: "router_health,memory", description: "Comma separated skills this agent can run" },
+      memory_namespace: { type: "string", default: "default", description: "Memory scope" },
+      auto_run: { type: "boolean", default: false, description: "Run on create" }
+    },
+    required: ["name", "purpose"]
+  },
+  run: async ({ name, purpose, persona, triggers, allowed_skills, memory_namespace, auto_run }, { logger, skillRegistry }) => {
+    const agentsPath = './knowledge/agents.json';
+    const agentsDir = './agents';
+    await fs.mkdir('./knowledge', { recursive: true });
+    await fs.mkdir(agentsDir, { recursive: true });
+
+    let agents = {};
+    try { agents = JSON.parse(await fs.readFile(agentsPath, 'utf8')); } catch {}
+
+    const agentConfig = {
+      name,
+      purpose,
+      persona,
+      triggers: triggers.split(',').map(s => s.trim()),
+      allowed_skills: allowed_skills.split(',').map(s => s.trim()),
+      memory_namespace,
+      created: new Date().toISOString(),
+      version: (agents[name]?.version || 0) + 1
+    };
+
+    agents[name] = agentConfig;
+    await fs.writeFile(agentsPath, JSON.stringify(agents, null, 2));
+
+    const agentFile = path.join(agentsDir, `${name}.js`);
+    const stub = `// Agent: ${name}\n// Purpose: ${purpose}\n// Persona: ${persona}\nmodule.exports = {\n name: "${name}",\n config: ${JSON.stringify(agentConfig, null, 2)},\n run: async (input, { skillRegistry, logger }) => {\n logger.info('AGENT ${name}: started');\n const results = [];\n for (const skillName of ${JSON.stringify(agentConfig.allowed_skills)}) {\n try {\n const res = await skillRegistry.execute(skillName, input);\n results.push({ skill: skillName, ok: true, result: res.message?.slice(0,200) });\n } catch (e) {\n results.push({ skill: skillName, ok: false, error: e.message });\n }\n }\n return { success: true, message: 'Agent ${name} completed ' + results.length + ' skills', results };\n }\n};\n`;
+    await fs.writeFile(agentFile, stub);
+
+    await fs.appendFile('./knowledge/soul.md', `\n## Create Agent ${new Date().toISOString()}\nName: ${name}\nPurpose: ${purpose}\nSkills: ${allowed_skills}\nVersion: ${agentConfig.version}\n`);
+
+    let autoResult = '';
+    if (auto_run) {
+      try {
+        const agent = require(`../agents/${name}`);
+        const res = await agent.run({}, { skillRegistry, logger });
+        autoResult = `\n\nAuto-run: ${res.message}`;
+      } catch (e) { autoResult = `\n\nAuto-run failed: ${e.message}`; }
+    }
+
+    const msg = `🤖 *Agent Created: ${name}*\n\n**Purpose**: ${purpose}\n**Persona**: ${persona}\n**Triggers**: ${agentConfig.triggers.join(', ')}\n**Allowed skills**: ${agentConfig.allowed_skills.join(', ')}\n**Version**: ${agentConfig.version}\n**File**: agents/${name}.js${autoResult}\n\nCall via: /api/agent?name=${name}`;
+    return { success: true, message: msg, agent: agentConfig };
+  }
+};
+
+module.exports = { create_agent };
