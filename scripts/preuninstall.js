@@ -1,49 +1,57 @@
 #!/usr/bin/env node
+'use strict';
 
 /**
- * Pre-uninstall script
- * Runs before npm uninstall -g agentos
+ * AgentOS Pre-uninstall
+ * Cleans up PATH entries and stops running gateway
+ * SAFE: no require() of app code — avoids crash on fresh/broken installs
  */
 
-const fs = require('fs');
+const fs   = require('fs');
 const path = require('path');
-const os = require('os');
+const os   = require('os');
 
-function removeFromPath() {
-  const home = os.homedir();
-  const configs = [
-    path.join(home, '.bashrc'),
-    path.join(home, '.bash_profile'),
-    path.join(home, '.zshrc'),
-    path.join(home, '.profile')
-  ];
-  
-  configs.forEach(config => {
-    if (fs.existsSync(config)) {
-      let content = fs.readFileSync(config, 'utf8');
-      
-      // Remove AgentOS PATH section
-      const regex = /\n# AgentOS PATH\nexport PATH="[^"]*:\$PATH"\n/g;
-      content = content.replace(regex, '');
-      
-      fs.writeFileSync(config, content);
-    }
-  });
-}
-
-// Stop running gateway
-const { STATE_PATH } = require('../src/core/config');
+// ── Stop gateway if running ───────────────────────────────────────────────────
+// Resolve state path directly — do NOT require app modules (they may not be installed)
+const STATE_PATH = process.env.AGENTOS_STATE_PATH
+    || path.join(os.homedir(), '.agentos', 'state');
 const pidFile = path.join(STATE_PATH, 'gateway.pid');
 
 if (fs.existsSync(pidFile)) {
-  try {
-    const pid = fs.readFileSync(pidFile, 'utf8');
-    process.kill(parseInt(pid), 'SIGTERM');
-    console.log('Stopped running gateway');
-  } catch (e) {
-    // Ignore
-  }
+    try {
+        const pid = parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10);
+        if (pid > 0) {
+            process.kill(pid, 'SIGTERM');
+            console.log('[AgentOS] Gateway stopped (PID %d)', pid);
+        }
+    } catch {
+        // Gateway may already be stopped — non-fatal
+    }
+    try { fs.unlinkSync(pidFile); } catch { /* ignore */ }
 }
 
-removeFromPath();
-console.log('AgentOS uninstalled. PATH cleaned up.');
+// ── Remove PATH entries from shell configs ────────────────────────────────────
+const shellConfigs = [
+    path.join(os.homedir(), '.bashrc'),
+    path.join(os.homedir(), '.bash_profile'),
+    path.join(os.homedir(), '.zshrc'),
+    path.join(os.homedir(), '.profile')
+];
+
+const PATH_MARKER = /\n# AgentOS PATH\nexport PATH="[^"]*:\$PATH"\n/g;
+
+shellConfigs.forEach(configFile => {
+    if (!fs.existsSync(configFile)) return;
+    try {
+        const original = fs.readFileSync(configFile, 'utf8');
+        const cleaned  = original.replace(PATH_MARKER, '');
+        if (cleaned !== original) {
+            fs.writeFileSync(configFile, cleaned);
+            console.log('[AgentOS] Removed PATH entry from', configFile);
+        }
+    } catch {
+        // Non-fatal — user may not have write access
+    }
+});
+
+console.log('[AgentOS] Uninstalled. Goodbye!');
