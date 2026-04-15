@@ -1,0 +1,131 @@
+{
+  "title": "AgentOS Audit Dashboard",
+  "uid": "agentos-audit",
+  "tags": ["agentos", "audit"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Total Tool Calls 24h",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({app=\"agentos\"} |= \"AUDIT\" ))",
+          "refId": "A"
+        }
+      ],
+      "options": { "colorMode": "background", "graphMode": "none" }
+    },
+    {
+      "type": "stat",
+      "title": "High Risk Calls 24h",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({app=\"agentos\"} |= \"AUDIT\" |= \"high\" ))",
+          "refId": "A"
+        }
+      ],
+      "options": { "colorMode": "background" },
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "color": "red", "value": 1 }] } } }
+    },
+    {
+      "type": "stat",
+      "title": "Pending Approvals",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({app=\"agentos\"} |= \"approval_created\" )) - sum(count_over_time({app=\"agentos\"} |= \"approval_resolved\" ))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Denied 24h",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({app=\"agentos\"} |= \"AUDIT\" |= \"denied\" ))",
+          "refId": "A"
+        }
+      ],
+      "options": { "colorMode": "background" }
+    },
+    {
+      "type": "timeseries",
+      "title": "Tool Calls by Risk",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "sum by (risk) (count_over_time({app=\"agentos\"} |= \"AUDIT\" | json | line_format \"{{.risk}}\" [$__interval]))",
+          "refId": "A",
+          "legendFormat": "{{risk}}"
+        }
+      ]
+    },
+    {
+      "type": "piechart",
+      "title": "Calls by User",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (user) (count_over_time({app=\"agentos\"} |= \"AUDIT\" | json )))",
+          "refId": "A",
+          "legendFormat": "{{user}}"
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "Recent High-Risk Actions",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "expr": "{app=\"agentos\"} |= \"AUDIT\" |= \"high\" | json",
+          "refId": "A"
+        }
+      ],
+      "options": { "showTime": true, "wrapLogMessage": true }
+    },
+    {
+      "type": "table",
+      "title": "Approval Queue",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 22 },
+      "targets": [
+        {
+          "expr": "{app=\"agentos\"} |= \"approval_created\" | json | line_format \"{{.id}}|{{.userId}}|{{.toolName}}|{{.args}}\"",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": {
+            "source": "Line",
+            "format": "delimited",
+            "delimiter": "|",
+            "fields": [
+              { "name": "ID", "type": "string" },
+              { "name": "User", "type": "string" },
+              { "name": "Tool", "type": "string" },
+              { "name": "Args", "type": "string" }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "user",
+        "type": "query",
+        "query": "label_values({app=\"agentos\"}, user)",
+        "multi": true
+      }
+    ]
+  }
+}
