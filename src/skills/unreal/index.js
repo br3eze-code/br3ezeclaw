@@ -22,6 +22,63 @@ class UnrealSkill extends BaseSkill {
 
   static getTools() {
     return {
+  
+'ue.p4.sync': {
+  risk: 'low',
+  description: 'Perforce sync workspace to CL or #head',
+  parameters: {
+    type: 'object',
+    properties: {
+      project: { type: 'string' },
+      changelist: { type: 'string', default: '#head', description: 'CL number or #head' },
+      force: { type: 'boolean', default: false }
+    },
+    required: ['project']
+  }
+},
+'ue.p4.submit': {
+  risk: 'high',
+  description: 'Perforce submit changelist. Requires approval.',
+  parameters: {
+    type: 'object',
+    properties: {
+      project: { type: 'string' },
+      files: { type: 'array', items: { type: 'string' }, description: 'paths to add/edit' },
+      description: { type: 'string' },
+      reason: { type: 'string' }
+    },
+    required: ['project', 'files', 'description', 'reason']
+  }
+},
+'ue.horde.job': {
+  risk: 'high',
+  description: 'Submit job to Horde CI: build, cook, test, render. Requires approval.',
+  parameters: {
+    type: 'object',
+    properties: {
+      project: { type: 'string' },
+      stream: { type: 'string', description: 'e.g. //UE5/Main' },
+      change: { type: 'string', default: 'latest' },
+      template: { type: 'string', enum: ['Editor', 'Cook', 'Tests', 'Package', 'Gauntlet'], default: 'Cook' },
+      target: { type: 'string', default: 'Editor' },
+      platform: { type: 'string', enum: ['Win64', 'Linux', 'PS5'], default: 'Linux' },
+      arguments: { type: 'string', description: 'extra UAT args' },
+      reason: { type: 'string' }
+    },
+    required: ['project', 'stream', 'reason']
+  }
+},
+'ue.horde.status': {
+  risk: 'low',
+  description: 'Check Horde job status',
+  parameters: {
+    type: 'object',
+    properties: {
+      job_id: { type: 'string' }
+    },
+    required: ['job_id']
+  }
+}
       'ue.project.info': {
         risk: 'low',
         description: 'Get .uproject info: engine version, plugins, targets',
@@ -156,6 +213,96 @@ class UnrealSkill extends BaseSkill {
   async execute(toolName, args, ctx) {
     try {
       switch (toolName) {
+          case 'ue.p4.sync':
+  this.logger.info(`UE P4 SYNC ${args.project} ${args.changelist}`, { user: ctx.userId })
+  const proj7 = this._safeUproject(args.project)
+  const p4Args = [
+    'SyncProject',
+    `-project="${proj7}"`,
+    `-change=${args.changelist}`,
+    args.force ? '-force' : ''
+  ].filter(Boolean)
+  const { stdout } = await this._runUAT(p4Args, 600)
+  return { project: args.project, changelist: args.changelist, log: stdout.slice(-4000) }
+
+case 'ue.p4.submit':
+  this.logger.warn(`UE P4 SUBMIT ${args.project}`, { user: ctx.userId, files: args.files.length, reason: args.reason })
+  const proj8 = this._safeUproject(args.project)
+  // Create changelist via Python in editor for file context
+  const submitScript = `
+import unreal
+import os
+changelist_desc = """${args.description}
+
+Submitted via AgentOS
+Reason: ${args.reason}"""
+scc = unreal.get_editor_subsystem(unreal.SourceControlSubsystem)
+scc.enable_source_control('Perforce')
+for f in ${JSON.stringify(args.files)}:
+    abs_path = os.path.join(unreal.Paths.project_dir(), f)
+    if os.path.exists(abs_path):
+        unreal.SourceControlHelpers.mark_file_for_add(abs_path)
+    else:
+        raise Exception(f'File not found: {f}')
+provider = scc.get_provider()
+new_cl = provider.create_changelist(changelist_desc)
+provider.submit_changelist(new_cl)
+print(f'Submitted CL {new_cl.get_identifier()}')
+`
+  await this._remotePython(proj8, submitScript, 120)
+  return { project: args.project, files: args.files, description: args.description, submitted: true }
+
+case 'ue.horde.job':
+  this.logger.warn(`UE HORDE JOB ${args.template} ${args.stream}`, { user: ctx.userId, change: args.change, reason: args.reason })
+  const hordeUrl = this.workspace.horde_server || process.env.HORDE_URL
+  if (!hordeUrl) throw new Error('HORDE_URL not set in env or workspace')
+  
+  const payload = {
+    name: `${args.project}-${args.template}-${Date.now()}`,
+    streamId: args.stream,
+    change: args.change === 'latest' ? undefined : parseInt(args.change),
+    templateId: args.template,
+    arguments: [
+      `-Target=${args.target}`,
+      `-Platform=${args.platform}`,
+      args.arguments || ''
+    ].filter(Boolean)
+  }
+  
+  const res = await axios.post(`${hordeUrl}/api/v1/jobs`, payload, {
+    headers: {
+      'Authorization': `Bearer ${process.env.HORDE_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  })
+  
+  return {
+    job_id: res.data.id,
+    job_name: res.data.name,
+    stream: args.stream,
+    template: args.template,
+    url: `${hordeUrl}/job/${res.data.id}`,
+    status: res.data.state
+  }
+
+case 'ue.horde.status':
+  const hordeUrl2 = this.workspace.horde_server || process.env.HORDE_URL
+  const res2 = await axios.get(`${hordeUrl2}/api/v1/jobs/${args.job_id}`, {
+    headers: { 'Authorization': `Bearer ${process.env.HORDE_TOKEN}` }
+  })
+  const job = res2.data
+  return {
+    job_id: job.id,
+    name: job.name,
+    state: job.state, // Running, Complete, Failed
+    outcome: job.outcome, // Success, Failure, Warning
+    batches: job.batches?.map(b => ({
+      id: b.id,
+      state: b.state,
+      steps: b.steps?.map(s => ({ name: s.name, state: s.state, log: s.logUrl }))
+    })),
+    url: `${hordeUrl2}/job/${job.id}`
+  }
         case 'ue.project.info':
           const uproject = this._safeUproject(args.project)
           const data = JSON.parse(await fs.readFile(uproject, 'utf8'))
