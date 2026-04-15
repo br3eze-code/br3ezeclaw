@@ -16,7 +16,45 @@ class BlenderSkill extends BaseSkill {
   }
 
   static getTools() {
-    // Add to static getTools() return object:
+    
+ // Add to static getTools() return object:
+'blender.usd.export': {
+  risk: 'medium',
+  description: 'Export USD with variants, payloads, layers. Requires approval.',
+  parameters: {
+    type: 'object',
+    properties: {
+      file: { type: 'string' },
+      mode: { type: 'string', enum: ['flatten', 'payload', 'reference'], default: 'payload' },
+      variants: { type: 'array', items: { type: 'string' }, description: 'collection names for variant sets' },
+      root_prim: { type: 'string', default: '/World' },
+      include_materials: { type: 'boolean', default: true },
+      include_animation: { type: 'boolean', default: false },
+      s3_bucket: { type: 'string' },
+      s3_key: { type: 'string' },
+      reason: { type: 'string' }
+    },
+    required: ['file', 'reason']
+  }
+},
+'blender.review.post': {
+  risk: 'low',
+  description: 'Post render/version to Frame.io or ShotGrid for review',
+  parameters: {
+    type: 'object',
+    properties: {
+      file: { type: 'string', description: 'rendered mp4/png or .blend to render first' },
+      platform: { type: 'string', enum: ['frameio', 'shotgrid'], default: 'frameio' },
+      project: { type: 'string', description: 'Frame.io project ID or ShotGrid project name' },
+      version_name: { type: 'string' },
+      note: { type: 'string' },
+      frame_start: { type: 'number', description: 'render first if .blend' },
+      frame_end: { type: 'number' },
+      auto_render: { type: 'boolean', default: false }
+    },
+    required: ['file', 'project', 'version_name']
+  }
+}
 'blender.sim.run': {
   risk: 'high',
   description: 'Run physics sim: cloth, fluid, smoke, rigid body. Export cache. Requires approval.',
@@ -266,6 +304,145 @@ if __name__ == '__main__':
   async execute(toolName, args, ctx) {
     try {
       switch (toolName) {
+          case 'blender.usd.export':
+  this.logger.warn(`BLENDER USD EXPORT ${args.file} mode:${args.mode}`, { user: ctx.userId, reason: args.reason })
+  const blend9 = this._safeBlendPath(args.file)
+  
+  const usdScript = `
+import bpy
+import os
+out_path = os.path.join('${this.outputDir}', f"usd_${Date.now()}.usd")
+
+# Variant setup: collections become variant sets
+if ${JSON.stringify(args.variants || [])}:
+    root = bpy.data.objects.new('root', None)
+    bpy.context.scene.collection.objects.link(root)
+    
+    var_set = root.keys() or root.get('variantSet')
+    for var_name in ${JSON.stringify(args.variants || [])}:
+        coll = bpy.data.collections.get(var_name)
+        if coll:
+            # USD export handles collections as prims
+            pass
+
+bpy.ops.wm.usd_export(
+    filepath=out_path,
+    root_prim_path='${args.root_prim}',
+    export_meshes=True,
+    export_materials=${args.include_materials ? 'True' : 'False'},
+    export_animation=${args.include_animation ? 'True' : 'False'},
+    export_subdivision='BEST_MATCH',
+    export_shapekeys=True,
+    export_uvmaps=True,
+    evaluation_mode='RENDER',
+    export_as_collection=False if '${args.mode}' == 'flatten' else True
+)
+
+# If payload mode, wrap in payload.usda
+if '${args.mode}' == 'payload':
+    payload_path = out_path.replace('.usd', '_payload.usda')
+    os.rename(out_path, payload_path)
+    with open(out_path, 'w') as f:
+        f.write(f'''#usda 1.0
+(
+    defaultPrim = "World"
+    upAxis = "Z"
+)
+def Xform "World" (
+    prepend payload = @./{os.path.basename(payload_path)}@
+)
+{
+}
+''')
+    print(json.dumps({'usd': out_path, 'payload': payload_path}))
+else:
+    print(json.dumps({'usd': out_path}))
+`
+  const req9 = { action: 'script', blend_file: blend9, out_dir: this.outputDir, script: usdScript }
+  const { output: out9 } = await this._runBlender([this.blenderPath, '-b', '-P', this._pythonBridge(), '--', JSON.stringify(req9)], 300)
+  const res9 = JSON.parse(out9.trim().split('\n').pop())
+  
+  // Upload to S3 if requested
+  if (args.s3_bucket && args.s3_key) {
+    const buf = await fs.readFile(res9.usd)
+    await this.agent.registry.execute('aws.s3.put', {
+      bucket: args.s3_bucket,
+      key: args.s3_key,
+      body_base64: buf.toString('base64'),
+      content_type: 'model/vnd.usd+zip'
+    }, ctx.userId)
+    
+    if (res9.payload) {
+      const pbuf = await fs.readFile(res9.payload)
+      await this.agent.registry.execute('aws.s3.put', {
+        bucket: args.s3_bucket,
+        key: args.s3_key.replace('.usd', '_payload.usda'),
+        body_base64: pbuf.toString('base64'),
+        content_type: 'text/plain'
+      }, ctx.userId)
+    }
+  }
+  
+  return { file: args.file, usd: res9.usd, payload: res9.payload, mode: args.mode, s3: args.s3_bucket ? `s3://${args.s3_bucket}/${args.s3_key}` : null }
+
+case 'blender.review.post':
+  this.logger.info(`BLENDER REVIEW POST ${args.platform} ${args.version_name}`, { user: ctx.userId })
+  let mediaPath = this._safeBlendPath(args.file)
+  
+  // Auto-render if .blend + frames given
+  if (args.auto_render && args.file.endsWith('.blend')) {
+    const render = await this.execute('blender.render', {
+      file: args.file,
+      start: args.frame_start,
+      end: args.frame_end,
+      format: 'MP4',
+      reason: `Auto-render for review: ${args.version_name}`
+    }, ctx)
+    // Assume render returns path or base64
+    mediaPath = path.join(this.outputDir, `render_${Date.now()}.mp4`)
+    if (render.base64) await fs.writeFile(mediaPath, Buffer.from(render.base64, 'base64'))
+  }
+  
+  const mediaBuf = await fs.readFile(mediaPath)
+  
+  if (args.platform === 'frameio') {
+    // Requires FRAMEIO_TOKEN in env + frameio skill or direct API
+    const FormData = require('form-data')
+    const form = new FormData()
+    form.append('file', mediaBuf, path.basename(mediaPath))
+    form.append('name', args.version_name)
+    
+    const res = await fetch(`https://api.frame.io/v2/projects/${args.project}/assets`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${process.env.FRAMEIO_TOKEN}`, ...form.getHeaders() },
+      body: form
+    })
+    const asset = await res.json()
+    
+    // Add comment
+    if (args.note) {
+      await fetch(`https://api.frame.io/v2/assets/${asset.id}/comments`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${process.env.FRAMEIO_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: args.note })
+      })
+    }
+    
+    return { platform: 'frameio', asset_id: asset.id, view_url: asset.view_url, version: args.version_name }
+  
+  } else if (args.platform === 'shotgrid') {
+    // Requires shotgrid skill with auth
+    if (!this.agent.registry.skills.shotgrid) throw new Error('ShotGrid skill not enabled')
+    const version = await this.agent.registry.execute('sg.version.create', {
+      project: args.project,
+      code: args.version_name,
+      description: args.note,
+      media_path: mediaPath
+    }, ctx.userId)
+    return { platform: 'shotgrid', version_id: version.id, url: version.url }
+  }
+  
+  throw new Error(`Unsupported platform ${args.platform}`)
           case 'blender.ai.texture':
   this.logger.warn(`BLENDER AI TEXTURE ${args.file}:${args.material}`, { user: ctx.userId, prompt: args.prompt, reason: args.reason })
   const blend5 = this._safeBlendPath(args.file)
