@@ -1,0 +1,29 @@
+{
+  "user.kick": {
+    "risk": "medium",
+    "description": "Disconnect a hotspot user from the router",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "pattern": "^[a-zA-Z0-9_-]{1,32}$" },
+        "routerId": { "type": "string" }
+      },
+      "required": ["username", "routerId"],
+      "additionalProperties": false
+    }
+  },
+  "system.reboot": {
+    "risk": "high",
+    "requiresApproval": true,
+    "description": "Reboot the MikroTik router",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "routerId": { "type": "string" },
+        "reason": { "type": "string", "maxLength": 200 }
+      },
+      "required": ["routerId", "reason"],
+      "additionalProperties": false
+    }
+  }
+}
