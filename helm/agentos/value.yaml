@@ -5,6 +5,12 @@ image:
   tag: "0.0.2"
   pullPolicy: IfNotPresent
 
+serviceAccount:
+  create: true
+  name: agentos
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/agentos-prod-agentos
+    
 service:
   type: ClusterIP
   port: 80
