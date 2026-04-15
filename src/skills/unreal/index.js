@@ -22,6 +22,65 @@ class UnrealSkill extends BaseSkill {
 
   static getTools() {
     return {
+'ue.android.test': {
+  risk: 'high',
+  description: 'Run Gauntlet on Android device via ADB. Requires approval.',
+  parameters: {
+    type: 'object',
+    properties: {
+      project: { type: 'string' },
+      device_id: { type: 'string', description: 'adb device serial' },
+      test: { type: 'string', default: 'Project.Functional' },
+      map: { type: 'string', default: '/Game/Maps/TestMap' },
+      vulkan: { type: 'boolean', default: true },
+      reason: { type: 'string' }
+    },
+    required: ['project', 'device_id', 'reason']
+  }
+},
+'ue.android.playstore': {
+  risk: 'high',
+  description: 'Upload AAB/APK to Google Play. Requires approval.',
+  parameters: {
+    type: 'object',
+    properties: {
+      project: { type: 'string' },
+      aab_path: { type: 'string', description: 'path from package build' },
+      track: { type: 'string', enum: ['internal', 'alpha', 'beta', 'production'], default: 'internal' },
+      release_notes: { type: 'string' },
+      reason: { type: 'string' }
+    },
+    required: ['project', 'aab_path', 'reason']
+  }
+},
+'ue.switch.deploy': {
+  risk: 'high',
+  description: 'Deploy to Nintendo Switch devkit via DevMenu. Requires approval.',
+  parameters: {
+    type: 'object',
+    properties: {
+      project: { type: 'string' },
+      nsp_path: { type: 'string', description: 'path from package build' },
+      devkit_ip: { type: 'string', description: 'Switch devkit IP' },
+      title_id: { type: 'string' },
+      reason: { type: 'string' }
+    },
+    required: ['project', 'nsp_path', 'devkit_ip', 'reason']
+  }
+},
+'ue.switch.lotcheck': {
+  risk: 'medium',
+  description: 'Run Nintendo LotCheck automation. Requires approval.',
+  parameters: {
+    type: 'object',
+    properties: {
+      project: { type: 'string' },
+      nsp_path: { type: 'string' },
+      reason: { type: 'string' }
+    },
+    required: ['project', 'nsp_path', 'reason']
+  }
+}
 'ue.multiplayer.deploy': {
   risk: 'high',
   description: 'Deploy dedicated server to Agones/K8s for playtest. Requires approval.',
@@ -300,6 +359,102 @@ class UnrealSkill extends BaseSkill {
   async execute(toolName, args, ctx) {
     try {
       switch (toolName) {
+          case 'ue.android.test':
+  this.logger.warn(`UE ANDROID TEST ${args.device_id}`, { user: ctx.userId, test: args.test, reason: args.reason })
+  const proj17 = this._safeUproject(args.project)
+
+  // Check ADB device online
+  const { stdout: adbOut } = await execAsync('adb devices')
+  if (!adbOut.includes(args.device_id)) throw new Error(`Device ${args.device_id} not found in adb devices`)
+
+  const androidArgs = [
+    'RunUnreal',
+    `-project="${proj17}"`,
+    `-test=${args.test}`,
+    '-platform=Android',
+    `-device=${args.device_id}`,
+    args.map? `-map=${args.map}` : '',
+    args.vulkan? '-vulkan' : '-opengl',
+    '-build=local',
+    '-config=Development',
+    '-unattended'
+  ].filter(Boolean)
+
+  const { stdout: andOut, stderr: andErr } = await this._runUAT(androidArgs, 1800)
+  const passed = andOut.includes('Test Successful') &&!andErr.includes('Error')
+
+  // Pull logcat on failure
+  if (!passed) {
+    const { stdout: logcat } = await execAsync(`adb -s ${args.device_id} logcat -d -t 500`)
+    return { project: args.project, device: args.device_id, test: args.test, passed, logcat: logcat.slice(-6000), log: andOut.slice(-2000) }
+  }
+
+  return { project: args.project, device: args.device_id, test: args.test, passed, log: andOut.slice(-4000) }
+
+case 'ue.android.playstore':
+  this.logger.warn(`UE PLAYSTORE UPLOAD ${args.aab_path}`, { user: ctx.userId, track: args.track, reason: args.reason })
+  const aab = path.resolve(this.projectRoot, args.aab_path)
+  await fs.access(aab)
+
+  if (!process.env.GOOGLE_PLAY_SERVICE_ACCOUNT) throw new Error('GOOGLE_PLAY_SERVICE_ACCOUNT json not set')
+
+  // Use fastlane or gradle-play-publisher via python
+  const py = `
+import json
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+
+creds = service_account.Credentials.from_service_account_file('${process.env.GOOGLE_PLAY_SERVICE_ACCOUNT}')
+service = build('androidpublisher', 'v3', credentials=creds)
+
+package_name = '${process.env.ANDROID_PACKAGE_NAME}'
+edit_id = service.edits().insert(packageName=package_name).execute()['id']
+
+media = MediaFileUpload('${aab}', mimetype='application/octet-stream', resumable=True)
+bundle = service.edits().bundles().upload(packageName=package_name, editId=edit_id, media_body=media).execute()
+
+track = service.edits().tracks().update(
+    packageName=package_name,
+    editId=edit_id,
+    track='${args.track}',
+    body={'releases': [{'versionCodes': [bundle['versionCode']], 'status': 'completed', 'releaseNotes': [{'language': 'en-US', 'text': """${args.release_notes}"""}]}]}
+).execute()
+
+service.edits().commit(packageName=package_name, editId=edit_id).execute()
+print(f"Uploaded versionCode {bundle['versionCode']} to ${args.track}")
+`
+  const { stdout } = await execAsync(`python3 -c "${py.replace(/"/g, '\\"')}"`, { timeout: 600000 })
+  return { project: args.project, aab: args.aab_path, track: args.track, uploaded: true, log: stdout }
+
+case 'ue.switch.deploy':
+  this.logger.warn(`UE SWITCH DEPLOY ${args.devkit_ip}`, { user: ctx.userId, nsp: args.nsp_path, reason: args.reason })
+  const nsp = path.resolve(this.projectRoot, args.nsp_path)
+  await fs.access(nsp)
+
+  if (!process.env.NINTENDO_SDK_ROOT) throw new Error('NINTENDO_SDK_ROOT not set')
+  const devmenu = path.join(process.env.NINTENDO_SDK_ROOT, 'Tools/CommandLineTools/DevMenu/DevMenu.exe')
+
+  // Install via DevMenu TCP
+  const cmd = `"${devmenu}" -i ${args.devkit_ip} -u install "${nsp}"`
+  const { stdout } = await execAsync(cmd, { timeout: 600000 })
+  if (!stdout.includes('Success')) throw new Error(`DevMenu install failed: ${stdout}`)
+
+  // Launch
+  const launch = `"${devmenu}" -i ${args.devkit_ip} -u launch ${args.title_id}`
+  await execAsync(launch)
+
+  return { project: args.project, nsp: args.nsp_path, devkit: args.devkit_ip, title_id: args.title_id, deployed: true, log: stdout.slice(-2000) }
+
+case 'ue.switch.lotcheck':
+  this.logger.warn(`UE SWITCH LOTCHECK ${args.nsp_path}`, { user: ctx.userId, reason: args.reason })
+  const nsp2 = path.resolve(this.projectRoot, args.nsp_path)
+  const lotcheck = path.join(process.env.NINTENDO_SDK_ROOT, 'Tools/CommandLineTools/LotCheck/LotCheck.exe')
+
+  const { stdout: lotOut, stderr: lotErr } = await execAsync(`"${lotcheck}" -p "${nsp2}" -o "${this.outputDir}/lotcheck_${Date.now()}.html"`, { timeout: 600000 })
+  const passed =!lotErr && lotOut.includes('LotCheck: PASS')
+  const reportPath = lotOut.match(/Report: (.+\.html)/)?.[1]
+  return { project: args.project, nsp: args.nsp_path, passed, report: reportPath, log: lotOut.slice(-4000) }
 case 'ue.multiplayer.deploy':
   this.logger.warn(`UE AGONES DEPLOY ${args.project} ${args.image}`, { user: ctx.userId, region: args.region, reason: args.reason })
   const proj12 = this._safeUproject(args.project)
