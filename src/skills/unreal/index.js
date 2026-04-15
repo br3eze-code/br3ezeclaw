@@ -300,66 +300,164 @@ class UnrealSkill extends BaseSkill {
   async execute(toolName, args, ctx) {
     try {
       switch (toolName) {
-          // Add to static getTools() return object:
-'ue.multiplayer.deploy': {
-  risk: 'high',
-  description: 'Deploy dedicated server to Agones/K8s for playtest. Requires approval.',
-  parameters: {
-    type: 'object',
-    properties: {
-      project: { type: 'string' },
-      image: { type: 'string', description: 'docker image: game-server:1.2.3' },
-      map: { type: 'string', default: '/Game/Maps/TestMap' },
-      max_players: { type: 'number', default: 16 },
-      region: { type: 'string', enum: ['us-west-2', 'eu-central-1', 'ap-northeast-1'], default: 'us-west-2' },
-      ttl: { type: 'number', default: 3600, description: 'auto-shutdown seconds' },
-      password: { type: 'string', description: 'server password' },
-      reason: { type: 'string' }
-    },
-    required: ['project', 'image', 'reason']
+case 'ue.multiplayer.deploy':
+  this.logger.warn(`UE AGONES DEPLOY ${args.project} ${args.image}`, { user: ctx.userId, region: args.region, reason: args.reason })
+  const proj12 = this._safeUproject(args.project)
+
+  // Generate Agones Fleet YAML
+  const fleetName = `agentos-${path.basename(proj12, '.uproject').toLowerCase()}-${Date.now()}`
+  const fleetYaml = `
+apiVersion: "agones.dev/v1"
+kind: Fleet
+metadata:
+  name: ${fleetName}
+  labels:
+    agentos: "true"
+    ttl: "${args.ttl}"
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        game: ${path.basename(proj12, '.uproject')}
+    spec:
+      ports:
+      - name: game
+        portPolicy: Dynamic
+        containerPort: 7777
+        protocol: UDP
+      template:
+        spec:
+          containers:
+          - name: gameserver
+            image: ${args.image}
+            command: ["/game/GameServer.sh"]
+            args: ["${args.map}?MaxPlayers=${args.max_players}${args.password? '?Password='+args.password : ''}", "-log", "-port=7777"]
+            resources:
+              requests:
+                cpu: "2000m"
+                memory: "4Gi"
+              limits:
+                cpu: "4000m"
+                memory: "8Gi"
+`
+
+  // kubectl apply via aws skill or direct
+  if (!this.agent.registry.skills.k8s) throw new Error('K8s skill required for Agones')
+  const apply = await this.agent.registry.execute('k8s.apply', {
+    yaml: fleetYaml,
+    namespace: 'agones-system'
+  }, ctx.userId)
+
+  // Wait for allocation and get IP:port
+  let addr = null
+  for (let i = 0; i < 30; i++) {
+    await new Promise(r => setTimeout(r, 5000))
+    const gs = await this.agent.registry.execute('k8s.get', {
+      kind: 'GameServer',
+      labelSelector: `agones.dev/fleet=${fleetName}`,
+      namespace: 'agones-system'
+    }, ctx.userId)
+    if (gs.items?.[0]?.status?.state === 'Allocated') {
+      addr = `${gs.items[0].status.address}:${gs.items[0].status.ports[0].port}`
+      break
+    }
   }
-},
-'ue.multiplayer.stop': {
-  risk: 'medium',
-  description: 'Stop Agones fleet/game servers',
-  parameters: {
-    type: 'object',
-    properties: {
-      project: { type: 'string' },
-      fleet: { type: 'string', description: 'fleet name or "all"' }
-    },
-    required: ['project']
+
+  // Schedule TTL deletion
+  setTimeout(async () => {
+    await this.agent.registry.execute('k8s.delete', { kind: 'Fleet', name: fleetName, namespace: 'agones-system' }, 'system')
+    this.logger.info(`Agones fleet ${fleetName} auto-deleted after ${args.ttl}s`)
+  }, args.ttl * 1000)
+
+  return {
+    project: args.project,
+    fleet: fleetName,
+    image: args.image,
+    address: addr || 'pending',
+    map: args.map,
+    max_players: args.max_players,
+    ttl: args.ttl,
+    connect: addr? `open ${addr}` : 'wait for allocation'
   }
-},
-'ue.loc.gather': {
-  risk: 'low',
-  description: 'Run Loc gather: text from Blueprints/C++/UMG to.po files',
-  parameters: {
-    type: 'object',
-    properties: {
-      project: { type: 'string' },
-      config: { type: 'string', default: 'Game', description: 'Localization target name' },
-      preview: { type: 'boolean', default: false, description: 'dry run, no write' }
-    },
-    required: ['project']
+
+case 'ue.multiplayer.stop':
+  this.logger.info(`UE AGONES STOP ${args.fleet}`, { user: ctx.userId })
+  if (!this.agent.registry.skills.k8s) throw new Error('K8s skill required')
+  const result = await this.agent.registry.execute('k8s.delete', {
+    kind: 'Fleet',
+    name: args.fleet === 'all'? '' : args.fleet,
+    labelSelector: args.fleet === 'all'? 'agentos=true' : '',
+    namespace: 'agones-system'
+  }, ctx.userId)
+  return { project: args.project, stopped: args.fleet, result }
+
+case 'ue.loc.gather':
+  this.logger.info(`UE LOC GATHER ${args.project} ${args.config}`, { user: ctx.userId })
+  const proj13 = this._safeUproject(args.project)
+  const gatherArgs = [
+    'Localize',
+    `-project="${proj13}"`,
+    `-targetname=${args.config}`,
+    args.preview? '-preview' : ''
+  ].filter(Boolean)
+  const { stdout } = await this._runUAT(gatherArgs, 300)
+  const words = stdout.match(/Gathered (\d+) words/)?.[1] || '0'
+  const files = stdout.match(/Updated (\d+) files/)?.[1] || '0'
+  return { project: args.project, config: args.config, words_gathered: parseInt(words), files_updated: parseInt(files), preview: args.preview, log: stdout.slice(-2000) }
+
+case 'ue.loc.sync':
+  this.logger.warn(`UE LOC SYNC ${args.service} ${args.project}`, { user: ctx.userId, reason: args.reason })
+  const proj14 = this._safeUproject(args.project)
+  const locPath = path.join(path.dirname(proj14), 'Content/Localization', args.config)
+
+  if (args.service === 'onesky') {
+    const ONESKY_KEY = process.env.ONESKY_API_KEY
+    const ONESKY_SECRET = process.env.ONESKY_API_SECRET
+    const ONESKY_PROJECT = process.env.ONESKY_PROJECT_ID
+    if (!ONESKY_KEY) throw new Error('ONESKY_API_KEY not set')
+
+    // Push source.po
+    if (args.push_source) {
+      const sourcePo = path.join(locPath, 'en', `${args.config}.po`)
+      const poData = await fs.readFile(sourcePo)
+      const form = new FormData()
+      form.append('file', poData, `${args.config}.po`)
+      form.append('file_format', 'GNU_PO')
+      form.append('locale', 'en')
+      form.append('is_keeping_all_strings', 'false')
+
+      await axios.post(`https://api.oneskyapp.com/1/projects/${ONESKY_PROJECT}/files`, form, {
+        headers: {...form.getHeaders() },
+        auth: { username: ONESKY_KEY, password: ONESKY_SECRET }
+      })
+    }
+
+    // Pull translations
+    if (args.pull_translations) {
+      const langs = await axios.get(`https://api.oneskyapp.com/1/projects/${ONESKY_PROJECT}/languages`, {
+        auth: { username: ONESKY_KEY, password: ONESKY_SECRET }
+      })
+      for (const lang of langs.data.data) {
+        if (lang.code === 'en') continue
+        const res = await axios.get(`https://api.oneskyapp.com/1/projects/${ONESKY_PROJECT}/translations`, {
+          params: { locale: lang.code, source_file_name: `${args.config}.po` },
+          auth: { username: ONESKY_KEY, password: ONESKY_SECRET }
+        })
+        const outDir = path.join(locPath, lang.code)
+        await fs.mkdir(outDir, { recursive: true })
+        await fs.writeFile(path.join(outDir, `${args.config}.po`), res.data)
+      }
+      // Recompile loc
+      await this._runUAT(['Localize', `-project="${proj14}"`, `-targetname=${args.config}`, '-compile'], 120)
+    }
+
+    return { project: args.project, service: 'onesky', pushed: args.push_source, pulled: args.pull_translations }
+
+  } else if (args.service === 'poeditor') {
+    // Similar logic with POEditor API
+    throw new Error('POEditor sync not implemented yet - use onesky')
   }
-},
-'ue.loc.sync': {
-  risk: 'medium',
-  description: 'Sync.po files to OneSky/POEditor. Requires approval.',
-  parameters: {
-    type: 'object',
-    properties: {
-      project: { type: 'string' },
-      config: { type: 'string', default: 'Game' },
-      service: { type: 'string', enum: ['onesky', 'poeditor'], default: 'onesky' },
-      push_source: { type: 'boolean', default: true },
-      pull_translations: { type: 'boolean', default: true },
-      reason: { type: 'string' }
-    },
-    required: ['project', 'reason']
-  }
-}
           case 'ue.insights.query':
   this.logger.info(`UE INSIGHTS QUERY ${args.trace} ${args.query}`, { user: ctx.userId })
   const tracePath = path.resolve(this.projectRoot, args.trace)
