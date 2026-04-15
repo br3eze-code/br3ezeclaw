@@ -21,7 +21,88 @@ class ResearchSkill extends BaseSkill {
 
   static getTools() {
     return {
-     // Add to static getTools() return object:
+ // Add to static getTools() return object:
+'research.papers.sync': {
+  risk: 'medium',
+  description: 'Sync ReadCube Papers library: articles, PDFs, notes. Requires approval.',
+  parameters: {
+    type: 'object',
+    properties: {
+      email: { type: 'string' },
+      password: { type: 'string', description: 'or API token' },
+      library: { type: 'string', enum: ['personal', 'shared'], default: 'personal' },
+      reason: { type: 'string' }
+    },
+    required: ['email', 'password', 'reason']
+  }
+},
+'research.papers.search': {
+  risk: 'low',
+  description: 'Search Papers library by title, author, journal, year',
+  parameters: {
+    type: 'object',
+    properties: {
+      email: { type: 'string' },
+      password: { type: 'string' },
+      query: { type: 'string' },
+      field: { type: 'string', enum: ['any', 'title', 'author', 'journal'], default: 'any' }
+    },
+    required: ['email', 'password', 'query']
+  }
+},
+'research.papers.annotate': {
+  risk: 'medium',
+  description: 'Add note/highlight to Papers PDF. Requires approval.',
+  parameters: {
+    type: 'object',
+    properties: {
+      email: { type: 'string' },
+      password: { type: 'string' },
+      paper_id: { type: 'string' },
+      page: { type: 'number' },
+      text: { type: 'string' },
+      note: { type: 'string' },
+      reason: { type: 'string' }
+    },
+    required: ['email', 'password', 'paper_id', 'page', 'text', 'reason']
+  }
+},
+'research.citavi.import': {
+  risk: 'medium',
+  description: 'Import Citavi.ctv6 project or.ctv5. Requires approval.',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'path to.ctv6 or.ctv5' },
+      reason: { type: 'string' }
+    },
+    required: ['path', 'reason']
+  }
+},
+'research.citavi.search': {
+  risk: 'low',
+  description: 'Search Citavi refs, knowledge items, quotations',
+  parameters: {
+    type: 'object',
+    properties: {
+      query: { type: 'string' },
+      type: { type: 'string', enum: ['reference', 'knowledge', 'quotation', 'any'], default: 'any' }
+    },
+    required: ['query']
+  }
+},
+'research.citavi.export': {
+  risk: 'low',
+  description: 'Export Citavi to BibTeX/RIS/Word',
+  parameters: {
+    type: 'object',
+    properties: {
+      ids: { type: 'array', items: { type: 'string' } },
+      format: { type: 'string', enum: ['bibtex', 'ris', 'word'], default: 'bibtex' }
+    },
+    required: ['ids', 'format']
+  }
+}
 'research.mendeley.sync': {
   risk: 'medium',
   description: 'Sync Mendeley library: docs, folders, annotations. Requires approval.',
@@ -424,6 +505,185 @@ class ResearchSkill extends BaseSkill {
     
     try {
       switch (toolName) {
+          case 'research.papers.sync':
+  this.logger.warn(`RESEARCH PAPERS SYNC ${args.library}`, { user: ctx.userId, reason: args.reason })
+  // ReadCube Papers uses Firebase auth + private API
+  const authRes = await fetch('https://api.readcube.com/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: args.email, password: args.password })
+  })
+  const { token } = await authRes.json()
+
+  const headers = { 'Authorization': `Bearer ${token}` }
+  const libRes = await fetch(`https://api.readcube.com/libraries/${args.library}/articles?limit=1000&expand=annotations,collections`, { headers })
+  const articles = await libRes.json()
+
+  const cachePath = path.join(this.outputDir, 'papers.json')
+  await fs.writeFile(cachePath, JSON.stringify({ articles, synced_at: new Date().toISOString() }, null, 2))
+
+  // Download PDFs
+  const pdfDir = path.join(this.outputDir, 'papers_pdf')
+  await fs.mkdir(pdfDir, { recursive: true })
+  for (const a of articles.slice(0, 50)) { // limit for demo
+    if (a.pdf_url) {
+      const pdfRes = await fetch(a.pdf_url, { headers })
+      const buf = Buffer.from(await pdfRes.arrayBuffer())
+      await fs.writeFile(path.join(pdfDir, `${a.id}.pdf`), buf)
+      a.local_pdf = path.join(pdfDir, `${a.id}.pdf`)
+    }
+  }
+
+  return { library: args.library, articles: articles.length, annotations: articles.reduce((n, a) => n + (a.annotations?.length || 0), 0), cache: cachePath }
+
+case 'research.papers.search':
+  this.logger.info(`RESEARCH PAPERS SEARCH ${args.field}: ${args.query}`, { user: ctx.userId })
+  const cache = JSON.parse(await fs.readFile(path.join(this.outputDir, 'papers.json'), 'utf8'))
+  const q = args.query.toLowerCase()
+
+  const results = cache.articles.filter(a => {
+    if (args.field === 'title') return a.title?.toLowerCase().includes(q)
+    if (args.field === 'author') return a.authors?.some(au => au.name.toLowerCase().includes(q))
+    if (args.field === 'journal') return a.journal?.toLowerCase().includes(q)
+    return a.title?.toLowerCase().includes(q) ||
+           a.authors?.some(au => au.name.toLowerCase().includes(q)) ||
+           a.abstract?.toLowerCase().includes(q)
+  }).slice(0, 50)
+
+  return { field: args.field, query: args.query, results: results.map(a => ({
+    id: a.id,
+    title: a.title,
+    authors: a.authors?.map(au => au.name).join(', '),
+    year: a.year,
+    journal: a.journal,
+    doi: a.doi,
+    annotations: a.annotations?.length || 0
+  })) }
+
+case 'research.papers.annotate':
+  this.logger.warn(`RESEARCH PAPERS ANNOTATE ${args.paper_id}`, { user: ctx.userId, reason: args.reason })
+  const authRes2 = await fetch('https://api.readcube.com/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: args.email, password: args.password })
+  })
+  const { token: token2 } = await authRes2.json()
+  const headers2 = { 'Authorization': `Bearer ${token2}`, 'Content-Type': 'application/json' }
+
+  const ann = {
+    type: args.note? 'note' : 'highlight',
+    page: args.page,
+    text: args.text,
+    color: '#FFEB3B'
+  }
+  if (args.note) ann.comment = args.note
+
+  const res = await fetch(`https://api.readcube.com/articles/${args.paper_id}/annotations`, {
+    method: 'POST',
+    headers: headers2,
+    body: JSON.stringify(ann)
+  })
+  const out = await res.json()
+  return { id: out.id, paper_id: args.paper_id, page: args.page, created: true }
+
+case 'research.citavi.import':
+  this.logger.warn(`RESEARCH CITAVI IMPORT ${args.path}`, { user: ctx.userId, reason: args.reason })
+  const filePath = path.resolve(this.workspace, args.path)
+  const ext = path.extname(filePath)
+  const cachePath2 = path.join(this.outputDir, 'citavi.json')
+
+  let refs = [], knowledge = [], quotes = []
+  if (ext === '.ctv6') {
+    // Citavi 6 is SQLite
+    const sqlite3 = require('sqlite3').verbose()
+    const db = new sqlite3.Database(filePath)
+    const get = promisify(db.all.bind(db))
+
+    const refsRows = await get(`SELECT r.*, GROUP_CONCAT(p.LastName||', '||p.FirstName, '; ') as authors
+                                FROM Reference r LEFT JOIN PersonReference pr ON r.ID = pr.ReferenceID
+                                LEFT JOIN Person p ON pr.PersonID = p.ID
+                                GROUP BY r.ID`)
+    refs = refsRows.map(r => ({
+      id: String(r.ID),
+      type: r.ReferenceType,
+      title: r.Title,
+      authors: r.authors,
+      year: r.Year,
+      periodical: r.Periodical,
+      doi: r.DOI,
+      abstract: r.Abstract
+    }))
+
+    const knowRows = await get(`SELECT * FROM KnowledgeItem`)
+    knowledge = knowRows.map(k => ({
+      id: String(k.ID),
+      category: k.CategoryID,
+      core_statement: k.CoreStatement,
+      text: k.Text,
+      ref_id: String(k.ReferenceID)
+    }))
+
+    const quoteRows = await get(`SELECT * FROM Quotation`)
+    quotes = quoteRows.map(q => ({
+      id: String(q.ID),
+      text: q.Text,
+      page: q.PageRange,
+      ref_id: String(q.ReferenceID)
+    }))
+
+    db.close()
+  } else {
+    throw new Error('Only.ctv6 supported. For.ctv5, export to RIS/BibTeX first')
+  }
+
+  await fs.writeFile(cachePath2, JSON.stringify({ refs, knowledge, quotes, imported_at: new Date().toISOString() }, null, 2))
+  return { path: args.path, references: refs.length, knowledge_items: knowledge.length, quotations: quotes.length, cache: cachePath2 }
+
+case 'research.citavi.search':
+  this.logger.info(`RESEARCH CITAVI SEARCH ${args.type}: ${args.query}`, { user: ctx.userId })
+  const cache2 = JSON.parse(await fs.readFile(path.join(this.outputDir, 'citavi.json'), 'utf8'))
+  const q2 = args.query.toLowerCase()
+
+  let results2 = []
+  if (args.type === 'reference' || args.type === 'any') {
+    results2.push(...cache2.refs.filter(r =>
+      r.title?.toLowerCase().includes(q2) || r.authors?.toLowerCase().includes(q2) || r.abstract?.toLowerCase().includes(q2)
+    ).map(r => ({...r, _type: 'reference' })))
+  }
+  if (args.type === 'knowledge' || args.type === 'any') {
+    results2.push(...cache2.knowledge.filter(k =>
+      k.core_statement?.toLowerCase().includes(q2) || k.text?.toLowerCase().includes(q2)
+    ).map(k => ({...k, _type: 'knowledge' })))
+  }
+  if (args.type === 'quotation' || args.type === 'any') {
+    results2.push(...cache2.quotes.filter(q => q.text?.toLowerCase().includes(q2)).map(q => ({...q, _type: 'quotation' })))
+  }
+
+  return { type: args.type, query: args.query, results: results2.slice(0, 50) }
+
+case 'research.citavi.export':
+  this.logger.info(`RESEARCH CITAVI EXPORT ${args.format}`, { user: ctx.userId })
+  const cache3 = JSON.parse(await fs.readFile(path.join(this.outputDir, 'citavi.json'), 'utf8'))
+  const refs2 = cache3.refs.filter(r => args.ids.includes(r.id))
+
+  let output = ''
+  if (args.format === 'bibtex') {
+    output = refs2.map(r => {
+      const key = r.authors?.split(';')[0].split(',')[0].replace(/\s/g, '') + r.year
+      return `@article{${key},\n title={${r.title}},\n author={${r.authors}},\n year={${r.year}},\n journal={${r.periodical}},\n doi={${r.doi}}\n}`
+    }).join('\n\n')
+  } else if (args.format === 'ris') {
+    output = refs2.map(r => {
+      return `TY - JOUR\nTI - ${r.title}\nAU - ${r.authors}\nPY - ${r.year}\nJO - ${r.periodical}\nDO - ${r.doi}\nAB - ${r.abstract}\nER - `
+    }).join('\n\n')
+  } else {
+    // Word = simple RTF
+    output = refs2.map(r => `${r.authors} (${r.year}). ${r.title}. ${r.periodical}.`).join('\n\n')
+  }
+
+  const outPath = path.join(this.outputDir, `citavi_export_${Date.now()}.${args.format === 'bibtex'? 'bib' : args.format === 'ris'? 'ris' : 'rtf'}`)
+  await fs.writeFile(outPath, output)
+  return { format: args.format, count: refs2.length, path: outPath }
           case 'research.mendeley.sync':
   this.logger.warn(`RESEARCH MENDELEY SYNC`, { user: ctx.userId, reason: args.reason })
   const headers = { 'Authorization': `Bearer ${args.token}`, 'Accept': 'application/vnd.mendeley-document.1+json' }
