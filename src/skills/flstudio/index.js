@@ -27,6 +27,79 @@ class FLStudioSkill extends BaseSkill {
 
   static getTools() {
     return {
+'flstudio.patcher': {
+  risk: 'low',
+  description: 'Control Patcher: presets, modules, routing, macros',
+  parameters: {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: ['load_preset', 'set_param', 'route', 'macro'], default: 'set_param' },
+      preset: { type: 'string', description: 'preset name/path' },
+      module: { type: 'string', description: 'Fruity Parametric EQ 2, etc' },
+      param: { type: 'string', description: 'Cutoff, Resonance' },
+      value: { type: 'number', description: '0-1 normalized' },
+      macro: { type: 'number', description: '1-8', default: 1 }
+    },
+    required: ['action']
+  }
+},
+'flstudio.script': {
+  risk: 'medium',
+  description: 'MIDI scripting: Python script for FL Studio MIDI Scripting API',
+  parameters: {
+    type: 'object',
+    properties: {
+      script: { type: 'string', description: 'Python code for FL MIDI Script' },
+      action: { type: 'string', enum: ['install', 'reload', 'test'], default: 'test' },
+      name: { type: 'string', description: 'script name', default: 'agentos_script' }
+    },
+    required: ['script']
+  }
+},
+'flstudio.channel': {
+  risk: 'low',
+  description: 'Control channel rack: select, mute, solo, volume, pan, plugin params',
+  parameters: {
+    type: 'object',
+    properties: {
+      channel: { type: 'number', description: '1-999', default: 1 },
+      action: { type: 'string', enum: ['select', 'mute', 'solo', 'volume', 'pan', 'param'], default: 'select' },
+      value: { type: 'number' },
+      param: { type: 'string', description: 'for param action: cutoff, res' }
+    },
+    required: ['channel', 'action']
+  }
+},
+'flstudio.plugin': {
+  risk: 'low',
+  description: 'Control plugins: Harmor, Sytrus, Serum, etc. via OSC',
+  parameters: {
+    type: 'object',
+    properties: {
+      plugin: { type: 'string', description: 'Harmor, Sytrus, Serum' },
+      channel: { type: 'number', default: 1 },
+      param: { type: 'string', description: 'partA_cutoff, osc1_shape' },
+      value: { type: 'number', description: '0-1 normalized' }
+    },
+    required: ['plugin', 'param', 'value']
+  }
+},
+'flstudio.piano_roll': {
+  risk: 'low',
+  description: 'Piano roll: add notes, clear, quantize, humanize',
+  parameters: {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: ['add_note', 'clear', 'quantize', 'humanize'], default: 'add_note' },
+      note: { type: 'string', description: 'C4, D#5' },
+      position: { type: 'number', description: 'steps from start' },
+      length: { type: 'number', description: 'steps', default: 4 },
+      velocity: { type: 'number', description: '0-127', default: 100 },
+      channel: { type: 'number', default: 1 }
+    },
+    required: ['action']
+  }
+}
       'flstudio.transport': {
         risk: 'low',
         description: 'Control transport: play, stop, record, loop, tempo',
@@ -122,6 +195,124 @@ class FLStudioSkill extends BaseSkill {
   async execute(toolName, args, ctx) {
     try {
       switch (toolName) {
+          case 'flstudio.patcher':
+  this.logger.info(`FL PATCHER ${args.action}`, { user: ctx.userId })
+  const patcherMap = {
+    load_preset: '/Patcher/loadPreset',
+    set_param: `/Patcher/${args.module}/${args.param}`,
+    macro: `/Patcher/Macro${args.macro}`,
+    route: '/Patcher/connect'
+  }
+  const addr = patcherMap[args.action]
+  const val = args.action === 'load_preset'? args.preset : 
+              args.action === 'macro'? args.value : 
+              args.value
+  this._sendOSC(addr, val)
+  return {
+    action: args.action,
+    address: addr,
+    value: val,
+    note: args.action === 'load_preset'? 'Load .fst preset' : 'Value 0-1 normalized'
+  }
+
+case 'flstudio.script':
+  this.logger.info(`FL SCRIPT ${args.action} ${args.name}`, { user: ctx.userId })
+  const fs = require('fs/promises')
+  const path = require('path')
+
+  const scriptPath = `${this.workspace}/fl_scripts`
+  await fs.mkdir(scriptPath, { recursive: true })
+  const filePath = path.join(scriptPath, `${args.name}.py`)
+
+  if (args.action === 'install' || args.action === 'test') {
+    const template = `# FL Studio MIDI Script - ${args.name}
+# Name: ${args.name}
+# Author: AgentOS
+
+import midi
+import channels
+import mixer
+import transport
+import ui
+
+def OnInit():
+    print('${args.name} loaded')
+
+def OnMidiMsg(event):
+    event.handled = False
+    # User script below
+${args.script.split('\n').map(l => '    ' + l).join('\n')}
+
+def OnRefresh(flags):
+    pass
+`
+    await fs.writeFile(filePath, template)
+  }
+
+  if (args.action === 'reload') {
+    this._sendOSC('/script/reload', args.name)
+  }
+
+  return {
+    action: args.action,
+    name: args.name,
+    path: filePath,
+    note: 'Copy to: Documents/Image-Line/FL Studio/Settings/Hardware/' + args.name + '/device_' + args.name + '.py',
+    install: 'Restart FL Studio → Options → MIDI Settings → select controller → Script'
+  }
+
+case 'flstudio.channel':
+  this.logger.info(`FL CHANNEL ${args.channel} ${args.action}`, { user: ctx.userId })
+  const channelMap = {
+    select: '/Channel/select',
+    mute: '/Channel/mute',
+    solo: '/Channel/solo',
+    volume: `/Channel/${args.channel}/volume`,
+    pan: `/Channel/${args.channel}/pan`,
+    param: `/Channel/${args.channel}/${args.param}`
+  }
+  const val = args.action === 'select'? args.channel :
+              args.action === 'mute' || args.action === 'solo'? (args.value? 1 : 0) :
+              args.value
+  this._sendOSC(channelMap[args.action], val)
+  return { channel: args.channel, action: args.action, value: val, address: channelMap[args.action] }
+
+case 'flstudio.plugin':
+  this.logger.info(`FL PLUGIN ${args.plugin} ${args.param}=${args.value}`, { user: ctx.userId })
+  const addr = `/Plugin/${args.plugin}/${args.param}`
+  this._sendOSC(addr, args.value)
+  return {
+    plugin: args.plugin,
+    channel: args.channel,
+    param: args.param,
+    value: args.value,
+    address: addr,
+    note: 'Link plugin param to OSC in FL: Right-click → Link to controller → OSC'
+  }
+
+case 'flstudio.piano_roll':
+  this.logger.info(`FL PIANO_ROLL ${args.action}`, { user: ctx.userId })
+  const pianoMap = {
+    add_note: '/PianoRoll/addNote',
+    clear: '/PianoRoll/clear',
+    quantize: '/PianoRoll/quantize',
+    humanize: '/PianoRoll/humanize'
+  }
+
+  if (args.action === 'add_note') {
+    const noteData = {
+      note: args.note,
+      pos: args.position,
+      len: args.length,
+      vel: args.velocity,
+      ch: args.channel
+    }
+    this._sendOSC(pianoMap.add_note, JSON.stringify(noteData))
+    return { action: 'add_note', note: args.note, position: args.position, channel: args.channel }
+  }
+
+  this._sendOSC(pianoMap[args.action], 1)
+  return { action: args.action, channel: args.channel }
         case 'flstudio.transport':
           this.logger.info(`FL TRANSPORT ${args.action}`, { user: ctx.userId })
           const transportMap = {
