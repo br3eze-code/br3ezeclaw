@@ -14,6 +14,45 @@ class LanguageSkill extends BaseSkill {
 
   static getTools() {
     return {
+'language.thesaurus': {
+  risk: 'low',
+  description: 'Advanced thesaurus: hypernyms, hyponyms, meronyms, holonyms, related terms',
+  parameters: {
+    type: 'object',
+    properties: {
+      word: { type: 'string' },
+      lang: { type: 'string', default: 'en' },
+      relation: { type: 'string', enum: ['synonym', 'antonym', 'hypernym', 'hyponym', 'meronym', 'holonym', 'related', 'all'], default: 'all' },
+      limit: { type: 'number', default: 10 }
+    },
+    required: ['word']
+  }
+},
+'language.etymology': {
+  risk: 'low',
+  description: 'Word origin, etymology, historical evolution, cognates',
+  parameters: {
+    type: 'object',
+    properties: {
+      word: { type: 'string' },
+      lang: { type: 'string', default: 'en' }
+    },
+    required: ['word']
+  }
+},
+'language.rhymes': {
+  risk: 'low',
+  description: 'Find rhymes, near-rhymes, alliteration for creative writing',
+  parameters: {
+    type: 'object',
+    properties: {
+      word: { type: 'string' },
+      type: { type: 'string', enum: ['perfect', 'near', 'alliteration', 'consonant'], default: 'perfect' },
+      limit: { type: 'number', default: 20 }
+    },
+    required: ['word']
+  }
+}
       'language.detect': {
         risk: 'low',
         description: 'Detect language of text',
@@ -103,7 +142,88 @@ class LanguageSkill extends BaseSkill {
           const code = franc(args.text)
           const names = { eng: 'English', spa: 'Spanish', fra: 'French', deu: 'German', zho: 'Chinese', jpn: 'Japanese', por: 'Portuguese', rus: 'Russian' }
           return { code, language: names[code] || code, confidence: code === 'und'? 0 : 1 }
+case 'language.thesaurus':
+  this.logger.info(`LANGUAGE THESAURUS ${args.word} ${args.relation}`, { user: ctx.userId })
+  // Datamuse API supports semantic relations
+  const base = 'https://api.datamuse.com/words'
+  const relMap = {
+    synonym: 'ml', // means like
+    antonym: 'rel_ant', // antonyms
+    hypernym: 'rel_spc', // more specific = hypernym of query
+    hyponym: 'rel_gen', // more general = hyponym of query
+    meronym: 'rel_par', // part of
+    holonym: 'rel_com', // comprises
+    related: 'rel_trg' // triggers/related
+  }
 
+  try {
+    if (args.relation === 'all') {
+      const results = {}
+      for (const [rel, code] of Object.entries(relMap)) {
+        const url = `${base}?${code}=${encodeURIComponent(args.word)}&max=${args.limit}`
+        const res = await fetch(url)
+        results[rel] = (await res.json()).map(w => w.word)
+      }
+      return { word: args.word, lang: args.lang, relations: results }
+    } else {
+      const code = relMap[args.relation]
+      const url = `${base}?${code}=${encodeURIComponent(args.word)}&max=${args.limit}`
+      const res = await fetch(url)
+      const words = await res.json()
+      return { word: args.word, relation: args.relation, terms: words.map(w => w.word) }
+    }
+  } catch {
+    // LLM fallback with WordNet-style relations
+    if (!this.agent.registry.skills.llm) throw new Error('Thesaurus requires network or llm skill')
+    const prompt = `For "${args.word}" in ${args.lang}, list ${args.relation === 'all'? 'all semantic relations' : args.relation}.
+JSON: {"synonym":[],"antonym":[],"hypernym":[],"hyponym":[],"meronym":[],"holonym":[],"related":[]}
+Hypernym = broader category. Hyponym = specific type. Meronym = part of. Holonym = whole of.`
+    const res = await this.agent.registry.execute('llm.chat', { prompt, model: 'gpt-4' }, ctx.userId)
+    try { return { word: args.word, lang: args.lang,...JSON.parse(res.text) } } catch { return { word: args.word, note: res.text } }
+  }
+
+case 'language.etymology':
+  this.logger.info(`LANGUAGE ETYMOLOGY ${args.word}`, { user: ctx.userId })
+  // Wiktionary API
+  try {
+    const url = `https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(args.word)}`
+    const res = await fetch(url)
+    if (!res.ok) throw new Error('Not found')
+
+    // Etymology is in page HTML, not definition API. Use LLM for structured data.
+    if (this.agent.registry.skills.llm) {
+      const prompt = `Give etymology of "${args.word}" in ${args.lang}.
+JSON: {"word":"","language_of_origin":"","root":"","first_attested":"","evolution":[{"period":"","form":"","meaning":""}],"cognates":[{"lang":"","word":""}],"note":""}
+Be concise but scholarly.`
+      const llmRes = await this.agent.registry.execute('llm.chat', { prompt, model: 'gpt-4' }, ctx.userId)
+      try { return JSON.parse(llmRes.text) } catch { return { word: args.word, etymology: llmRes.text } }
+    }
+    throw new Error('Etymology requires llm skill')
+  } catch (e) {
+    throw new Error(`Etymology lookup failed: ${e.message}`)
+  }
+
+case 'language.rhymes':
+  this.logger.info(`LANGUAGE RHYMES ${args.word} ${args.type}`, { user: ctx.userId })
+  const rhymeBase = 'https://api.datamuse.com/words'
+  const typeMap = {
+    perfect: 'rel_rhy', // perfect rhymes
+    near: 'rel_nry', // near rhymes
+    alliteration: 'rel_bga', // begins with same sound
+    consonant: 'rel_cns' // consonant match
+  }
+
+  try {
+    const url = `${rhymeBase}?${typeMap[args.type]}=${encodeURIComponent(args.word)}&max=${args.limit}`
+    const res = await fetch(url)
+    const words = await res.json()
+    return { word: args.word, type: args.type, rhymes: words.map(w => w.word) }
+  } catch {
+    if (!this.agent.registry.skills.llm) throw new Error('Rhymes requires network or llm skill')
+    const prompt = `List ${args.limit} ${args.type} rhymes for "${args.word}". JSON: {"rhymes":[]}`
+    const res = await this.agent.registry.execute('llm.chat', { prompt }, ctx.userId)
+    try { return { word: args.word, type: args.type,...JSON.parse(res.text) } } catch { return { word: args.word, note: res.text } }
+  }
         case 'language.translate':
           this.logger.info(`LANGUAGE TRANSLATE to ${args.target}`, { user: ctx.userId })
 
