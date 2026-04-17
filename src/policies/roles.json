@@ -1,0 +1,14 @@
+{
+  "mobile": {
+    "tools": ["cordova.info", "cordova.build", "cordova.run"],
+    "requireApproval": ["cordova.build", "cordova.run"]
+  },
+  "build": {
+    "tools": ["cordova.platform.add", "cordova.plugin.add", "cordova.build", "cordova.sign.android", "cordova.ios.upload"],
+    "requireApproval": ["cordova.platform.add", "cordova.plugin.add", "cordova.build", "cordova.sign.android", "cordova.ios.upload"]
+  },
+  "td": {
+    "tools": ["cordova.*"],
+    "requireApproval": ["cordova.platform.add", "cordova.plugin.add", "cordova.build", "cordova.run", "cordova.sign.android", "cordova.ios.upload"]
+  }
+}
