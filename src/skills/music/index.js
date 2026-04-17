@@ -13,6 +13,75 @@ class MusicSkill extends BaseSkill {
 
   static getTools() {
     return {
+      // Add to static getTools() return object:
+'music.distributed': {
+  risk: 'low',
+  description: 'Network music: OSC/MIDI sync, clock, collaborative performance, Ableton Link',
+  parameters: {
+    type: 'object',
+    properties: {
+      protocol: { type: 'string', enum: ['osc', 'midi', 'ableton_link', 'webrtc'], default: 'osc' },
+      action: { type: 'string', enum: ['send', 'receive', 'sync', 'broadcast'], default: 'send' },
+      address: { type: 'string', description: '/tempo, /note, /cc1' },
+      value: { type: 'any', description: 'number, string, array' },
+      host: { type: 'string', default: 'localhost' },
+      port: { type: 'number', default: 57120 }
+    },
+    required: ['protocol', 'action']
+  }
+},
+'music.clock': {
+  risk: 'low',
+  description: 'Musical clock: BPM, phase, bar/beat, sync multiple clients',
+  parameters: {
+    type: 'object',
+    properties: {
+      bpm: { type: 'number', default: 120 },
+      action: { type: 'string', enum: ['start', 'stop', 'sync', 'tap'], default: 'start' },
+      peers: { type: 'number', description: 'clients to sync', default: 1 }
+    },
+    required: ['action']
+  }
+},
+'music.archive': {
+  risk: 'low',
+  description: 'Musicology corpus: search scores, analyze style, composer attribution',
+  parameters: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'composer, period, key, motif' },
+      corpus: { type: 'string', enum: ['imslp', 'kern', 'essen', 'rime', 'all'], default: 'all' },
+      mode: { type: 'string', enum: ['search', 'analyze', 'compare', 'attribute'], default: 'search' }
+    },
+    required: ['query']
+  }
+},
+'music.style': {
+  risk: 'low',
+  description: 'Style analysis: features, period, composer, genre classification',
+  parameters: {
+    type: 'object',
+    properties: {
+      chords: { type: 'array', items: { type: 'string' }, description: 'chord progression' },
+      melody: { type: 'array', items: { type: 'string' }, description: 'note sequence' },
+      features: { type: 'array', items: { type: 'string' }, description: 'extract: harmony, rhythm, melody' }
+    },
+    required: []
+  }
+},
+'music.score': {
+  risk: 'low',
+  description: 'Fetch/analyze scores: MusicXML, MEI, Kern. Find motifs, cadences',
+  parameters: {
+    type: 'object',
+    properties: {
+      work: { type: 'string', description: 'BWV 772, K. 331, Op. 27 No. 2' },
+      format: { type: 'string', enum: ['musicxml', 'mei', 'kern', 'midi'], default: 'kern' },
+      analysis: { type: 'string', enum: ['motifs', 'cadences', 'form', 'all'], default: 'all' }
+    },
+    required: ['work']
+  }
+}
 'music.live': {
   risk: 'low',
   description: 'Live coding: TidalCycles, Sonic Pi, Strudel patterns, algorithmic composition',
@@ -360,7 +429,126 @@ case 'music.ai_stems':
     note: 'Install demucs: pip install demucs. Spleeter: pip install spleeter. Outputs WAV 44.1kHz.',
     specs: { sr: 44100, bit_depth: 16, format: 'wav' }
   }
+case 'music.distributed':
+  this.logger.info(`MUSIC DISTRIBUTED ${args.protocol} ${args.action}`, { user: ctx.userId })
 
+  if (args.protocol === 'osc') {
+    // OSC message structure - requires osc library in production
+    const msg = {
+      address: args.address || '/note',
+      args: Array.isArray(args.value)? args.value : [args.value],
+      host: args.host,
+      port: args.port
+    }
+    return {
+      protocol: 'osc',
+      action: args.action,
+      message: msg,
+      code: `sendOSC('${args.address}', ${JSON.stringify(args.value)})`,
+      note: 'Install: npm install osc. Use SuperCollider/Max/PureData to receive.'
+    }
+  }
+
+  if (args.protocol === 'ableton_link') {
+    return {
+      protocol: 'ableton_link',
+      action: args.action,
+      bpm: args.value || 120,
+      peers: 1,
+      code: 'abl_link_enable(true); abl_link_set_tempo(120)',
+      note: 'Ableton Link: peer-to-peer tempo/phase sync. No host. Use link library.'
+    }
+  }
+
+  if (args.protocol === 'midi') {
+    return {
+      protocol: 'midi',
+      action: args.action,
+      message: { type: args.address || 'cc', channel: 1, value: args.value },
+      code: `midiOut.send([176, ${args.address || 1}, ${args.value}])`,
+      note: 'WebMIDI or node-midi. Channel 1-16.'
+    }
+  }
+
+  if (args.protocol === 'webrtc') {
+    return {
+      protocol: 'webrtc',
+      action: args.action,
+      note: 'Use WebRTC DataChannel for low-latency clock sync. PeerJS/SimplePeer.',
+      code: 'channel.send({type:"clock",t:audioContext.currentTime,bpm:120})'
+    }
+  }
+
+  return { protocol: args.protocol, action: args.action }
+
+case 'music.clock':
+  this.logger.info(`MUSIC CLOCK ${args.action} ${args.bpm}BPM`, { user: ctx.userId })
+  const startTime = Date.now()
+  const beatDur = 60000 / args.bpm
+
+  return {
+    bpm: args.bpm,
+    action: args.action,
+    beat_duration_ms: beatDur.toFixed(2),
+    phase: 0,
+    peers: args.peers,
+    sync_token: `${startTime}_${args.bpm}`,
+    bar_duration_ms: (beatDur * 4).toFixed(2),
+    note: args.action === 'tap'? 'Tap 4 times, avg intervals' : 'Share sync_token with peers'
+  }
+
+case 'music.archive':
+  this.logger.info(`MUSIC ARCHIVE ${args.mode} ${args.corpus}: ${args.query}`, { user: ctx.userId })
+  if (!this.agent.registry.skills.llm) throw new Error('Archive search requires llm skill')
+
+  const prompts = {
+    search: `Search musicology corpus ${args.corpus} for: "${args.query}".
+JSON: {"results":[{"work":"BWV 772","composer":"J.S. Bach","year":1723,"key":"C major","corpus":"kern","url":"imslp.org/"}],"total":5}`,
+    analyze: `Analyze musical work "${args.query}" from ${args.corpus}.
+JSON: {"work":"","composer":"","period":"Baroque","form":"Invention","key":"C major","meter":"4/4","features":{"counterpoint":true,"sequences":3},"style_markers":[]}`,
+    compare: `Compare "${args.query}" across corpora. Find stylistic similarities.
+JSON: {"query":"","matches":[{"work":"","similarity":0.87,"shared_features":["circle_of_fifths","suspensions"]}]}`,
+    attribute: `Attribute composer/period for: "${args.query}". Use stylometry.
+JSON: {"attribution":{"composer":"Mozart","confidence":78},"features":{"melodic_intervals":"small","chromaticism":"low","form":"sonata"},"alternatives":[{"composer":"Haydn","confidence":65}]}`
+  }
+
+  const res = await this.agent.registry.execute('llm.chat', { prompt: prompts[args.mode], model: 'gpt-4' }, ctx.userId)
+  try { return { mode: args.mode, corpus: args.corpus,...JSON.parse(res.text) } } catch { return { query: args.query, results: res.text } }
+
+case 'music.style':
+  this.logger.info(`MUSIC STYLE analysis`, { user: ctx.userId })
+  if (!this.agent.registry.skills.llm) throw new Error('Style analysis requires llm skill')
+
+  const prompt = `Analyze musical style from chords: ${args.chords?.join(' ')} melody: ${args.melody?.join(' ')}.
+JSON: {
+  "period":"Baroque/Classical/Romantic/Modern",
+  "genre":"jazz/pop/chorale",
+  "composer_style":"Bach-like/Chopin-like",
+  "features":{
+    "harmony":{"functional":true,"chromaticism":"low","sevenths":2},
+    "melody":{"conjunct":true,"range":"P8","ornaments":0},
+    "rhythm":{"regular":true,"syncopation":"low"}
+  },
+  "confidence":85
+}`
+  const res = await this.agent.registry.execute('llm.chat', { prompt, model: 'gpt-4' }, ctx.userId)
+  try { return JSON.parse(res.text) } catch { return { style: res.text } }
+
+case 'music.score':
+  this.logger.info(`MUSIC SCORE ${args.work} ${args.format}`, { user: ctx.userId })
+  if (!this.agent.registry.skills.llm) throw new Error('Score analysis requires llm skill')
+
+  const prompt = `Analyze score ${args.work} in ${args.format}. ${args.analysis}.
+JSON: {
+  "work":"${args.work}",
+  "format":"${args.format}",
+  "motifs":[{"name":"A","notes":"C-D-E","occurrences":12}],
+  "cadences":[{"type":"perfect","measure":8,"key":"C major"}],
+  "form":{"type":"Binary","sections":["A:1-8","B:9-16"]},
+  "url":"kern.humdrum.org"
+}`
+  const res = await this.agent.registry.execute('llm.chat', { prompt, model: 'gpt-4' }, ctx.userId)
+  try { return JSON.parse(res.text) } catch { return { work: args.work, analysis: res.text } }
 case 'music.ai_generate':
   this.logger.info(`MUSIC AI_GENERATE ${args.mode} ${args.duration}s`, { user: ctx.userId })
   if (!this.agent.registry.skills.llm) throw new Error('AI generation requires llm skill')
