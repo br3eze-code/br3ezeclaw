@@ -27,6 +27,77 @@ class FLStudioSkill extends BaseSkill {
 
   static getTools() {
     return {
+'flstudio.performance': {
+  risk: 'low',
+  description: 'Performance mode: launch clips, scenes, record loops, track status',
+  parameters: {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: ['launch_clip', 'launch_scene', 'stop_clip', 'record_clip', 'get_state'], default: 'launch_clip' },
+      track: { type: 'number', description: '1-64', default: 1 },
+      clip: { type: 'number', description: '1-64', default: 1 },
+      scene: { type: 'number', description: '1-64' },
+      quantize: { type: 'string', enum: ['none', '1bar', '2bar', '4bar'], default: '1bar' }
+    },
+    required: ['action']
+  }
+},
+'flstudio.api': {
+  risk: 'medium',
+  description: 'FL Studio Python API: deep integration via MIDI Script API',
+  parameters: {
+    type: 'object',
+    properties: {
+      module: { type: 'string', enum: ['transport', 'channels', 'mixer', 'playlist', 'patterns', 'plugins', 'ui'], default: 'transport' },
+      method: { type: 'string', description: 'start, stop, getChannelVolume, etc' },
+      args: { type: 'array', items: { type: 'any' }, default: [] }
+    },
+    required: ['module', 'method']
+  }
+},
+'flstudio.mixer_fx': {
+  risk: 'low',
+  description: 'Mixer FX slots: add, remove, bypass, reorder plugins',
+  parameters: {
+    type: 'object',
+    properties: {
+      track: { type: 'number', default: 1 },
+      slot: { type: 'number', description: '1-10', default: 1 },
+      action: { type: 'string', enum: ['add', 'remove', 'bypass', 'move'], default: 'bypass' },
+      plugin: { type: 'string', description: 'Fruity Parametric EQ 2' },
+      value: { type: 'number', description: '0/1 for bypass' }
+    },
+    required: ['track', 'slot', 'action']
+  }
+},
+'flstudio.playlist_marker': {
+  risk: 'low',
+  description: 'Playlist markers: add, jump, loop region',
+  parameters: {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: ['add', 'jump', 'loop'], default: 'add' },
+      position: { type: 'number', description: 'bar' },
+      name: { type: 'string', description: 'Verse, Chorus' },
+      color: { type: 'string', description: '#FF0000' }
+    },
+    required: ['action']
+  }
+},
+'flstudio.browse': {
+  risk: 'low',
+  description: 'Browser: load sample, preset, project from browser',
+  parameters: {
+    type: 'object',
+    properties: {
+      type: { type: 'string', enum: ['sample', 'preset', 'project', 'plugin'], default: 'sample' },
+      path: { type: 'string', description: 'Packs/Drums/Kick.wav' },
+      target: { type: 'string', enum: ['channel', 'mixer', 'playlist'], default: 'channel' },
+      slot: { type: 'number', default: 1 }
+    },
+    required: ['type', 'path']
+  }
+}
 'flstudio.patcher': {
   risk: 'low',
   description: 'Control Patcher: presets, modules, routing, macros',
@@ -195,6 +266,120 @@ class FLStudioSkill extends BaseSkill {
   async execute(toolName, args, ctx) {
     try {
       switch (toolName) {
+    case 'flstudio.performance':
+  this.logger.info(`FL PERFORMANCE ${args.action} T${args.track}C${args.clip}`, { user: ctx.userId })
+  const perfMap = {
+    launch_clip: `/performance/launch/${args.track}/${args.clip}`,
+    stop_clip: `/performance/stop/${args.track}/${args.clip}`,
+    launch_scene: `/performance/scene/${args.scene}`,
+    record_clip: `/performance/record/${args.track}/${args.clip}`,
+    get_state: '/performance/state'
+  }
+  this._sendOSC(perfMap[args.action], args.quantize === 'none'? 0 : 1)
+  return {
+    action: args.action,
+    track: args.track,
+    clip: args.clip,
+    scene: args.scene,
+    quantize: args.quantize,
+    address: perfMap[args.action],
+    note: 'Enable Performance Mode in FL: View → Playlist → Performance mode'
+  }
+
+case 'flstudio.api':
+  this.logger.info(`FL API ${args.module}.${args.method}`, { user: ctx.userId })
+  // FL Studio Python API via MIDI Script - returns code to execute
+  const apiModules = {
+    transport: {
+      start: 'transport.start()',
+      stop: 'transport.stop()',
+      record: 'transport.record()',
+      getSongPos: 'transport.getSongPos()',
+      setSongPos: `transport.setSongPos(${args.args[0]})`
+    },
+    channels: {
+      getChannelName: `channels.getChannelName(${args.args[0]})`,
+      setChannelVolume: `channels.setChannelVolume(${args.args[0]}, ${args.args[1]})`,
+      getChannelVolume: `channels.getChannelVolume(${args.args[0]})`,
+      isChannelMuted: `channels.isChannelMuted(${args.args[0]})`,
+      muteChannel: `channels.muteChannel(${args.args[0]})`
+    },
+    mixer: {
+      setTrackVolume: `mixer.setTrackVolume(${args.args[0]}, ${args.args[1]})`,
+      getTrackVolume: `mixer.getTrackVolume(${args.args[0]})`,
+      getTrackName: `mixer.getTrackName(${args.args[0]})`,
+      isTrackMuted: `mixer.isTrackMuted(${args.args[0]})`
+    },
+    playlist: {
+      jumpToMarker: `playlist.jumpToMarker(${args.args[0]})`,
+      getVisTrackCount: 'playlist.getVisTrackCount()'
+    },
+    patterns: {
+      getPatternName: `patterns.getPatternName(${args.args[0]})`,
+      patternCount: 'patterns.patternCount()'
+    },
+    ui: {
+      showNotification: `ui.showNotification("${args.args[0]}")`,
+      setHintMsg: `ui.setHintMsg("${args.args[0]}")`
+    }
+  }
+
+  const code = apiModules[args.module]?.[args.method]
+  if (!code) throw new Error(`Unknown API: ${args.module}.${args.method}`)
+
+  return {
+    module: args.module,
+    method: args.method,
+    code,
+    note: 'Add to FL MIDI Script OnMidiMsg/OnRefresh. See: https://il.be/FLP/API'
+  }
+
+case 'flstudio.mixer_fx':
+  this.logger.info(`FL MIXER_FX T${args.track}S${args.slot} ${args.action}`, { user: ctx.userId })
+  const fxMap = {
+    add: `/Mixer/track${args.track}/slot${args.slot}/add`,
+    remove: `/Mixer/track${args.track}/slot${args.slot}/remove`,
+    bypass: `/Mixer/track${args.track}/slot${args.slot}/bypass`,
+    move: `/Mixer/track${args.track}/slot${args.slot}/move`
+  }
+  const val = args.action === 'add'? args.plugin : args.action === 'bypass'? args.value : args.slot
+  this._sendOSC(fxMap[args.action], val)
+  return {
+    track: args.track,
+    slot: args.slot,
+    action: args.action,
+    plugin: args.plugin,
+    address: fxMap[args.action]
+  }
+
+case 'flstudio.playlist_marker':
+  this.logger.info(`FL MARKER ${args.action} ${args.name}`, { user: ctx.userId })
+  const markerMap = {
+    add: '/Playlist/addMarker',
+    jump: '/Playlist/jumpToMarker',
+    loop: '/Playlist/setLoopPoints'
+  }
+  const val = args.action === 'add'? JSON.stringify({pos: args.position, name: args.name, color: args.color}) :
+              args.position
+  this._sendOSC(markerMap[args.action], val)
+  return { action: args.action, position: args.position, name: args.name, address: markerMap[args.action] }
+
+case 'flstudio.browse':
+  this.logger.info(`FL BROWSE ${args.type} ${args.path}`, { user: ctx.userId })
+  const browseMap = {
+    sample: '/Browser/loadSample',
+    preset: '/Browser/loadPreset',
+    project: '/Browser/loadProject',
+    plugin: '/Browser/loadPlugin'
+  }
+  this._sendOSC(browseMap[args.type], JSON.stringify({path: args.path, target: args.target, slot: args.slot}))
+  return {
+    type: args.type,
+    path: args.path,
+    target: args.target,
+    slot: args.slot,
+    note: 'Path relative to FL Browser root. E.g: Packs/Drums/Kicks/808.wav'
+  }
           case 'flstudio.patcher':
   this.logger.info(`FL PATCHER ${args.action}`, { user: ctx.userId })
   const patcherMap = {
