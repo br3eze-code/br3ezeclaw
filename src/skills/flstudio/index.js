@@ -27,6 +27,83 @@ class FLStudioSkill extends BaseSkill {
 
   static getTools() {
     return {
+'flstudio.ai': {
+  risk: 'low',
+  description: 'AI composition: MIDI generation, melody/chords, style transfer, inpainting',
+  parameters: {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: ['generate_melody', 'generate_chords', 'style_transfer', 'inpaint', 'continue'], default: 'generate_melody' },
+      prompt: { type: 'string', description: 'trap 140 BPM, lofi jazz, cyberpunk' },
+      key: { type: 'string', default: 'C' },
+      scale: { type: 'string', default: 'major' },
+      bars: { type: 'number', default: 4 },
+      reference_track: { type: 'number', description: 'channel for style_transfer' },
+      model: { type: 'string', enum: ['musicgen', 'magenta', 'aiva'], default: 'musicgen' }
+    },
+    required: ['action']
+  }
+},
+'flstudio.ai_master': {
+  risk: 'low',
+  description: 'AI stem mastering: isolate, master, rebalance stems',
+  parameters: {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: ['separate', 'master', 'rebalance'], default: 'master' },
+      file: { type: 'string', description: 'mix.wav or attachment://N' },
+      target_lufs: { type: 'number', default: -14 },
+      stems: { type: 'array', items: { type: 'string' }, enum: ['vocals', 'drums', 'bass', 'other'], default: ['vocals', 'drums', 'bass', 'other'] },
+      reference: { type: 'string', description: 'reference track for match' }
+    },
+    required: ['action']
+  }
+},
+'flstudio.video': {
+  risk: 'low',
+  description: 'ZGameEditor Visualizer: load video, sync to audio, export MP4',
+  parameters: {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: ['load_video', 'load_effect', 'set_param', 'export'], default: 'load_effect' },
+      file: { type: 'string', description: 'video.mp4 or effect.preset' },
+      effect: { type: 'string', description: 'Spectrum, Wave, Image, Text' },
+      param: { type: 'string', description: 'color, size, speed' },
+      value: { type: 'any' },
+      resolution: { type: 'string', enum: ['1080p', '4K', '720p'], default: '1080p' }
+    },
+    required: ['action']
+  }
+},
+'flstudio.sync': {
+  risk: 'low',
+  description: 'Video/audio sync: timecode, markers to video frames',
+  parameters: {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: ['set_tc', 'marker_to_frame', 'video_to_audio'], default: 'set_tc' },
+      timecode: { type: 'string', description: '01:00:00' },
+      fps: { type: 'number', default: 30 },
+      marker: { type: 'string', description: 'marker name' }
+    },
+    required: ['action']
+  }
+},
+'flstudio.visualizer': {
+  risk: 'low',
+  description: 'Audio-reactive visuals: spectrum, waveform, MIDI → visuals',
+  parameters: {
+    type: 'object',
+    properties: {
+      type: { type: 'string', enum: ['spectrum', 'wave', 'image', 'text', 'particles'], default: 'spectrum' },
+      audio_source: { type: 'string', enum: ['master', 'track'], default: 'master' },
+      track: { type: 'number', description: 'if audio_source=track' },
+      reactive: { type: 'string', enum: ['volume', 'pitch', 'transient'], default: 'volume' },
+      color: { type: 'string', default: '#00FF00' }
+    },
+    required: ['type']
+  }
+}
 'flstudio.arrangement': {
   risk: 'low',
   description: 'Song structure AI: generate arrangements, apply templates, auto-arrange',
@@ -340,6 +417,129 @@ class FLStudioSkill extends BaseSkill {
   async execute(toolName, args, ctx) {
     try {
       switch (toolName) {
+             case 'flstudio.ai':
+  this.logger.info(`FL AI ${args.action} ${args.model}`, { user: ctx.userId })
+  if (!this.agent.registry.skills.llm) throw new Error('AI generation requires llm skill')
+
+  const prompts = {
+    generate_melody: `Generate ${args.bars} bar melody in ${args.key} ${args.scale}. Style: ${args.prompt}.
+JSON: {"notes":[{"note":"C4","pos":0,"len":1,"vel":100},{"note":"E4","pos":1,"len":1,"vel":90}],"key":"${args.key}","scale":"${args.scale}"}`,
+    generate_chords: `Generate ${args.bars} bar chord progression in ${args.key} ${args.scale}. Style: ${args.prompt}.
+JSON: {"chords":[{"chord":"Cmaj7","pos":0,"bars":1},{"chord":"Am7","pos":1,"bars":1}],"key":"${args.key}"}`,
+    style_transfer: `Transfer style from channel ${args.reference_track} to new ${args.bars} bar phrase.
+JSON: {"notes":[...],"features":{"rhythm":"syncopated","contour":"ascending"}}`,
+    inpaint: `Inpaint melody. Context: ${args.prompt}. Fill bars 2-3 of ${args.bars} bar phrase.
+JSON: {"notes":[...],"masked_bars":[2,3]}`,
+    continue: `Continue phrase for ${args.bars} bars. Style: ${args.prompt}.
+JSON: {"notes":[...]}`
+  }
+
+  const res = await this.agent.registry.execute('llm.chat', { prompt: prompts[args.action], model: 'gpt-4' }, ctx.userId)
+  try {
+    const data = JSON.parse(res.text)
+    // Send to FL piano roll
+    if (data.notes) {
+      data.notes.forEach(n => {
+        this._sendOSC('/PianoRoll/addNote', JSON.stringify(n))
+      })
+    }
+    if (data.chords) {
+      this._sendOSC('/PianoRoll/addChords', JSON.stringify(data.chords))
+    }
+    return { action: args.action, model: args.model, ...data }
+  } catch {
+    return { action: args.action, result: res.text }
+  }
+
+case 'flstudio.ai_master':
+  this.logger.info(`FL AI_MASTER ${args.action}`, { user: ctx.userId })
+  if (!this.agent.registry.skills.llm) throw new Error('AI mastering requires llm skill')
+
+  if (args.action === 'separate') {
+    return {
+      action: 'separate',
+      file: args.file,
+      stems: args.stems,
+      command: `demucs -n htdemucs_ft ${args.file}`,
+      outputs: args.stems.map(s => `${args.file.replace(/\.[^.]+$/, '')}_${s}.wav`),
+      note: 'Run locally: pip install demucs. Outputs 44.1kHz WAV stems.'
+    }
+  }
+
+  if (args.action === 'master') {
+    const prompt = `AI mastering chain for ${args.file}. Target: ${args.target_lufs} LUFS. ${args.reference? `Match: ${args.reference}` : ''}
+JSON: {
+  "chain":[
+    {"fx":"EQ","params":{"low_cut":30,"high_shelf":{"freq":12000,"gain":1.5}}},
+    {"fx":"Multiband","params":{"low":{"ratio":"3:1"},"mid":{"ratio":"2:1"}}},
+    {"fx":"Limiter","params":{"threshold":-1.0,"lufs":${args.target_lufs}}}
+  ],
+  "targets":{"lufs":${args.target_lufs},"peak":-1.0,"lra":7}
+}`
+    const res = await this.agent.registry.execute('llm.chat', { prompt, model: 'gpt-4' }, ctx.userId)
+    try { return { action: 'master', ...JSON.parse(res.text) } } catch { return { mastering: res.text } }
+  }
+
+  if (args.action === 'rebalance') {
+    return {
+      action: 'rebalance',
+      note: 'Load stems → adjust mixer levels → bounce. Use /Mixer/trackN/volume via OSC.',
+      workflow: args.stems.map((s, i) => `/Mixer/track${i+1}/volume`)
+    }
+  }
+
+case 'flstudio.video':
+  this.logger.info(`FL VIDEO ${args.action}`, { user: ctx.userId })
+  const videoMap = {
+    load_video: '/ZGameEditor/loadVideo',
+    load_effect: '/ZGameEditor/loadEffect',
+    set_param: `/ZGameEditor/${args.param}`,
+    export: '/ZGameEditor/export'
+  }
+
+  if (args.action === 'load_video' || args.action === 'load_effect') {
+    this._sendOSC(videoMap[args.action], args.file || args.effect)
+    return { action: args.action, file: args.file || args.effect }
+  }
+
+  if (args.action === 'set_param') {
+    this._sendOSC(videoMap.set_param, args.value)
+    return { action: 'set_param', param: args.param, value: args.value }
+  }
+
+  if (args.action === 'export') {
+    this._sendOSC(videoMap.export, args.resolution)
+    return { action: 'export', resolution: args.resolution, note: 'Renders to FL Studio/Projects/Rendered' }
+  }
+
+case 'flstudio.sync':
+  this.logger.info(`FL SYNC ${args.action}`, { user: ctx.userId })
+  const syncMap = {
+    set_tc: '/Sync/timecode',
+    marker_to_frame: '/Sync/markerToFrame',
+    video_to_audio: '/Sync/videoToAudio'
+  }
+
+  const val = args.action === 'set_tc'? JSON.stringify({ tc: args.timecode, fps: args.fps }) :
+              args.action === 'marker_to_frame'? args.marker :
+              1
+  this._sendOSC(syncMap[args.action], val)
+  return { action: args.action, timecode: args.timecode, fps: args.fps, marker: args.marker }
+
+case 'flstudio.visualizer':
+  this.logger.info(`FL VISUALIZER ${args.type} ${args.reactive}`, { user: ctx.userId })
+  const visConfig = {
+    type: args.type,
+    source: args.audio_source,
+    track: args.track,
+    reactive: args.reactive,
+    color: args.color
+  }
+  this._sendOSC('/ZGameEditor/visualizer', JSON.stringify(visConfig))
+  return {
+    ...visConfig,
+    note: `ZGameEditor will react to ${args.reactive} from ${args.audio_source}. Link param in ZGE to audio input.`
+  }
           case 'flstudio.arrangement':
   this.logger.info(`FL ARRANGEMENT ${args.action} ${args.template}`, { user: ctx.userId })
   if (!this.agent.registry.skills.llm) throw new Error('Arrangement AI requires llm skill')
