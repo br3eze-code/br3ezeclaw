@@ -14,6 +14,72 @@ class MusicSkill extends BaseSkill {
   static getTools() {
     return {
       // Add to static getTools() return object:
+'music.performance': {
+  risk: 'low',
+  description: 'Real-time MIR: onset, pitch tracking, tempo curve, dynamics, articulation',
+  parameters: {
+    type: 'object',
+    properties: {
+      file: { type: 'string', description: 'audio file or attachment://N' },
+      features: { type: 'array', items: { type: 'string' }, enum: ['onset', 'pitch', 'tempo', 'dynamics', 'articulation', 'all'], default: ['all'] },
+      window: { type: 'number', description: 'ms', default: 50 }
+    },
+    required: ['file']
+  }
+},
+'music.gesture': {
+  risk: 'low',
+  description: 'Gesture tracking: conductor, instrumental, dance → music params',
+  parameters: {
+    type: 'object',
+    properties: {
+      source: { type: 'string', enum: ['video', 'midi_controller', 'leap', 'kinect'], default: 'midi_controller' },
+      mapping: { type: 'string', enum: ['tempo', 'dynamics', 'filter', 'spatial'], default: 'tempo' },
+      smoothing: { type: 'number', default: 0.3, description: '0-1' }
+    },
+    required: ['source']
+  }
+},
+'music.schenker': {
+  risk: 'low',
+  description: 'Schenkerian analysis: foreground, middleground, background, Ursatz',
+  parameters: {
+    type: 'object',
+    properties: {
+      chords: { type: 'array', items: { type: 'string' } },
+      melody: { type: 'array', items: { type: 'string' } },
+      key: { type: 'string', default: 'C' },
+      level: { type: 'string', enum: ['foreground', 'middleground', 'background', 'all'], default: 'all' }
+    },
+    required: ['chords']
+  }
+},
+'music.set_theory': {
+  risk: 'low',
+  description: 'Set theory: prime form, interval vector, Forte number, transformations',
+  parameters: {
+    type: 'object',
+    properties: {
+      notes: { type: 'array', items: { type: 'string' } },
+      operation: { type: 'string', enum: ['prime', 'vector', 'forte', 'transform'], default: 'prime' },
+      transform: { type: 'string', enum: ['T0', 'T6', 'I0', 'M', 'MI'], description: 'for transform op' }
+    },
+    required: ['notes']
+  }
+},
+'music.neo_riemann': {
+  risk: 'low',
+  description: 'Neo-Riemannian: P/L/R transforms, Tonnetz, hexatonic cycles',
+  parameters: {
+    type: 'object',
+    properties: {
+      chord: { type: 'string', description: 'C, Am, E' },
+      transform: { type: 'string', enum: ['P', 'L', 'R', 'N', 'S', 'H'], default: 'P' },
+      chain: { type: 'string', description: 'PLR, LPR', default: null }
+    },
+    required: ['chord']
+  }
+}
 'music.distributed': {
   risk: 'low',
   description: 'Network music: OSC/MIDI sync, clock, collaborative performance, Ableton Link',
@@ -429,6 +495,73 @@ case 'music.ai_stems':
     note: 'Install demucs: pip install demucs. Spleeter: pip install spleeter. Outputs WAV 44.1kHz.',
     specs: { sr: 44100, bit_depth: 16, format: 'wav' }
   }
+          // Add to static getTools() return object:
+'music.performance': {
+  risk: 'low',
+  description: 'Real-time MIR: onset, pitch tracking, tempo curve, dynamics, articulation',
+  parameters: {
+    type: 'object',
+    properties: {
+      file: { type: 'string', description: 'audio file or attachment://N' },
+      features: { type: 'array', items: { type: 'string' }, enum: ['onset', 'pitch', 'tempo', 'dynamics', 'articulation', 'all'], default: ['all'] },
+      window: { type: 'number', description: 'ms', default: 50 }
+    },
+    required: ['file']
+  }
+},
+'music.gesture': {
+  risk: 'low',
+  description: 'Gesture tracking: conductor, instrumental, dance → music params',
+  parameters: {
+    type: 'object',
+    properties: {
+      source: { type: 'string', enum: ['video', 'midi_controller', 'leap', 'kinect'], default: 'midi_controller' },
+      mapping: { type: 'string', enum: ['tempo', 'dynamics', 'filter', 'spatial'], default: 'tempo' },
+      smoothing: { type: 'number', default: 0.3, description: '0-1' }
+    },
+    required: ['source']
+  }
+},
+'music.schenker': {
+  risk: 'low',
+  description: 'Schenkerian analysis: foreground, middleground, background, Ursatz',
+  parameters: {
+    type: 'object',
+    properties: {
+      chords: { type: 'array', items: { type: 'string' } },
+      melody: { type: 'array', items: { type: 'string' } },
+      key: { type: 'string', default: 'C' },
+      level: { type: 'string', enum: ['foreground', 'middleground', 'background', 'all'], default: 'all' }
+    },
+    required: ['chords']
+  }
+},
+'music.set_theory': {
+  risk: 'low',
+  description: 'Set theory: prime form, interval vector, Forte number, transformations',
+  parameters: {
+    type: 'object',
+    properties: {
+      notes: { type: 'array', items: { type: 'string' } },
+      operation: { type: 'string', enum: ['prime', 'vector', 'forte', 'transform'], default: 'prime' },
+      transform: { type: 'string', enum: ['T0', 'T6', 'I0', 'M', 'MI'], description: 'for transform op' }
+    },
+    required: ['notes']
+  }
+},
+'music.neo_riemann': {
+  risk: 'low',
+  description: 'Neo-Riemannian: P/L/R transforms, Tonnetz, hexatonic cycles',
+  parameters: {
+    type: 'object',
+    properties: {
+      chord: { type: 'string', description: 'C, Am, E' },
+      transform: { type: 'string', enum: ['P', 'L', 'R', 'N', 'S', 'H'], default: 'P' },
+      chain: { type: 'string', description: 'PLR, LPR', default: null }
+    },
+    required: ['chord']
+  }
+}
 case 'music.distributed':
   this.logger.info(`MUSIC DISTRIBUTED ${args.protocol} ${args.action}`, { user: ctx.userId })
 
