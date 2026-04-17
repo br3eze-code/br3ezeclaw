@@ -13,6 +13,57 @@ class LanguageSkill extends BaseSkill {
   }
 
   static getTools() {
+'language.dialect': {
+  risk: 'low',
+  description: 'Map dialects: identify variety, features, regional variants, sociolects',
+  parameters: {
+    type: 'object',
+    properties: {
+      text: { type: 'string' },
+      lang: { type: 'string', default: 'en' },
+      mode: { type: 'string', enum: ['identify', 'features', 'convert', 'map'], default: 'identify' },
+      target_dialect: { type: 'string', description: 'for convert mode: en-US, en-GB, en-AU, es-MX, es-ES, etc' }
+    },
+    required: ['text']
+  }
+},
+'language.syntax': {
+  risk: 'low',
+  description: 'Syntax parsing: dependencies, constituency, POS, grammatical relations',
+  parameters: {
+    type: 'object',
+    properties: {
+      text: { type: 'string' },
+      lang: { type: 'string', default: 'en' },
+      format: { type: 'string', enum: ['dependencies', 'constituency', 'both'], default: 'dependencies' }
+    },
+    required: ['text']
+  }
+},
+'language.register': {
+  risk: 'low',
+  description: 'Analyze register: formal/informal, register shifts, appropriateness',
+  parameters: {
+    type: 'object',
+    properties: {
+      text: { type: 'string' },
+      context: { type: 'string', description: 'academic, business, casual, legal, etc' }
+    },
+    required: ['text']
+  }
+},
+'language.variation': {
+  risk: 'low',
+  description: 'Sociolinguistic variation: age, gender, class, region markers in text',
+  parameters: {
+    type: 'object',
+    properties: {
+      text: { type: 'string' },
+      lang: { type: 'string', default: 'en' }
+    },
+    required: ['text']
+  }
+}
 'language.prosody': {
   risk: 'low',
   description: 'Analyze prosody: intonation, rhythm, stress, pitch contour, meter',
@@ -245,6 +296,94 @@ class LanguageSkill extends BaseSkill {
           const code = franc(args.text)
           const names = { eng: 'English', spa: 'Spanish', fra: 'French', deu: 'German', zho: 'Chinese', jpn: 'Japanese', por: 'Portuguese', rus: 'Russian' }
           return { code, language: names[code] || code, confidence: code === 'und'? 0 : 1 }
+          case 'language.dialect':
+  this.logger.info(`LANGUAGE DIALECT ${args.mode} ${args.lang}`, { user: ctx.userId })
+  if (!this.agent.registry.skills.llm) throw new Error('Dialect analysis requires llm skill')
+
+  const prompts = {
+    identify: `Identify the dialect/variety of this ${args.lang} text. JSON: {"dialect":"en-US/en-GB/en-AU/en-IN/en-SG/etc","confidence":0-100,"features":[{"feature":"rhoticity","value":"rhotic","note":"pronounces r"}]}. Text:\n${args.text}`,
+    features: `List dialectal features in this ${args.lang} text. JSON: {"dialect":"","phonology":["drops r"],"lexicon":["lorry=truck"],"grammar":["use of 'got'"],"pragmatics":[]}. Text:\n${args.text}`,
+    convert: `Convert this ${args.lang} text to ${args.target_dialect}. Preserve meaning. Only output converted text. Text:\n${args.text}`,
+    map: `Map regional variants for key terms in this text. JSON: {"terms":[{"standard":"","variants":[{"dialect":"en-GB","form":"lift"},{"dialect":"en-US","form":"elevator"}]}]}. Text:\n${args.text}`
+  }
+
+  const res = await this.agent.registry.execute('llm.chat', { prompt: prompts[args.mode], model: 'gpt-4' }, ctx.userId)
+
+  if (args.mode === 'convert') {
+    return { source: args.lang, target: args.target_dialect, text: res.text.trim() }
+  }
+  try {
+    return { mode: args.mode, lang: args.lang,...JSON.parse(res.text) }
+  } catch {
+    return { mode: args.mode, analysis: res.text }
+  }
+
+case 'language.syntax':
+  this.logger.info(`LANGUAGE SYNTAX ${args.format}`, { user: ctx.userId })
+  const nlp = require('compromise')
+  const doc = nlp(args.text)
+
+  const result = { text: args.text, lang: args.lang }
+
+  if (args.format === 'dependencies' || args.format === 'both') {
+    // Basic dependencies via compromise + LLM for full parse
+    const terms = doc.terms().json()
+    result.pos = terms.map(t => ({ text: t.text, tags: t.tags, normal: t.normal }))
+
+    if (this.agent.registry.skills.llm) {
+      const prompt = `Dependency parse for ${args.lang}. Universal Dependencies format. JSON: {"tokens":[{"id":1,"form":"","lemma":"","upos":"","head":0,"deprel":"root/nsubj/obj/etc"}],"root":1}
+Text: ${args.text}`
+      const res = await this.agent.registry.execute('llm.chat', { prompt }, ctx.userId)
+      try { result.dependencies = JSON.parse(res.text) } catch { result.dependency_note = res.text }
+    }
+  }
+
+  if (args.format === 'constituency' || args.format === 'both') {
+    if (this.agent.registry.skills.llm) {
+      const prompt = `Constituency parse for ${args.lang}. Penn Treebank format. JSON: {"tree":"(S (NP (DT The) (NN cat)) (VP (VBD sat)))","phrases":[{"type":"NP","text":"The cat"}]}
+Text: ${args.text}`
+      const res = await this.agent.registry.execute('llm.chat', { prompt }, ctx.userId)
+      try { result.constituency = JSON.parse(res.text) } catch { result.constituency_note = res.text }
+    }
+  }
+
+  return result
+
+case 'language.register':
+  this.logger.info(`LANGUAGE REGISTER ${args.context || 'general'}`, { user: ctx.userId })
+  if (!this.agent.registry.skills.llm) throw new Error('Register analysis requires llm skill')
+
+  const prompt = `Analyze register/formality of this text. Context: ${args.context || 'general'}.
+JSON: {
+  "register":"formal/informal/neutral/mixed",
+  "score":1-10,
+  "features":{"lexical":["utilize=formal","gonna=informal"],"grammatical":["passive voice","contractions"]},
+  "appropriateness":"appropriate/inappropriate for ${args.context || 'general'}",
+  "shifts":[{"span":"text","from":"formal","to":"informal"}],
+  "suggestion":""
+}
+Text:\n${args.text}`
+  const res = await this.agent.registry.execute('llm.chat', { prompt, model: 'gpt-4' }, ctx.userId)
+  try { return JSON.parse(res.text) } catch { return { text: args.text, analysis: res.text } }
+
+case 'language.variation':
+  this.logger.info(`LANGUAGE VARIATION ${args.lang}`, { user: ctx.userId })
+  if (!this.agent.registry.skills.llm) throw new Error('Variation analysis requires llm skill')
+
+  const prompt = `Analyze sociolinguistic variation in this ${args.lang} text. Identify markers of:
+age, gender, class, region, ethnicity, education level.
+JSON: {
+  "markers":{
+    "regional":[{"feature":"y'all","region":"US South"},{"feature":"innit","region":"UK"}],
+    "class":[{"feature":"ain't","register":"nonstandard"}],
+    "age":[{"feature":"slay","cohort":"GenZ"}]
+  },
+  "overall":"assessment",
+  "dominant_variety":""
+}
+Text:\n${args.text}`
+  const res = await this.agent.registry.execute('llm.chat', { prompt, model: 'gpt-4' }, ctx.userId)
+  try { return JSON.parse(res.text) } catch { return { text: args.text, analysis: res.text } }
     case 'language.prosody':
   this.logger.info(`LANGUAGE PROSODY ${args.mode}: ${args.text.slice(0, 40)}`, { user: ctx.userId })
   const nlp = require('compromise')
