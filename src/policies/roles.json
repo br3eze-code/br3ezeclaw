@@ -11,4 +11,16 @@
     "tools": ["cordova.*"],
     "requireApproval": ["cordova.platform.add", "cordova.plugin.add", "cordova.build", "cordova.run", "cordova.sign.android", "cordova.ios.upload"]
   }
+  "analyst": {
+    "tools": ["research.search", "research.fetch", "research.pdf", "research.citations"],
+    "requireApproval": []
+  },
+  "researcher": {
+    "tools": ["research.*"],
+    "requireApproval": ["research.synthesize"]
+  },
+  "td": {
+    "tools": ["research.*"],
+    "requireApproval": ["research.synthesize"]
+  }
 }
