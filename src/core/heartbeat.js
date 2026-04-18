@@ -1,4 +1,6 @@
 // src/core/heartbeat.js
+const fs = require('fs').promises;
+const path = require('path');
 class HeartbeatScheduler {
   constructor(agentRuntime) {
     this.interval = process.env.HEARTBEAT_INTERVAL || 1800000; // 30min
