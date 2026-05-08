@@ -1,6 +1,6 @@
 {
 	"name": "br3eze-code",
-	"version": "2026.5.76",
+	"version": "2026.5.78",
 	"description": "AgentOS — Network Intelligence Operating System for MikroTik via AI",
 	"main": "src/core/gateway.js",
 	"bin": {
@@ -10,6 +10,8 @@
 	"scripts": {
 		"start": "node bin/agentos.js gateway",
 		"start:modern": "node agentos.mjs",
+		"automate": "pm2 start scripts/automate.js --name agentos-ops",
+		"start:all": "npm run start & npm run automate",
 		"dev": "nodemon bin/agentos.js --dev",
 		"setup": "node bin/agentos.js onboard",
 		"security:audit": "npm audit && node scripts/security-check.js",
