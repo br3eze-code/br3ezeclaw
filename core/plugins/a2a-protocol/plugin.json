@@ -1,0 +1,63 @@
+{
+    "name": "@br3eze/a2a-protocol",
+    "version": "1.1.0",
+    "type": "transport",
+    "entrypoint": "index.js",
+    "description": "A2A Protocol Adapter for Gemini Enterprise + ADK agents",
+    "br3ezeVersion": ">=0.9.0",
+    "hooks": {
+        "core:bootstrap": "onBootstrap",
+        "agent:init": "onAgentInit",
+        "gateway:registerRoutes": "onRegisterRoutes",
+        "capability:register": "onCapabilityRegister"
+    },
+    "configSchema": {
+        "spiffeID": {
+            "type": "string",
+            "required": false
+        },
+        "trustedAgents": {
+            "type": "array",
+            "default": []
+        },
+        "mTLS": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "certPath": {
+                    "type": "string",
+                    "default": "/spiffe/certs"
+                }
+            }
+        },
+        "modelArmor": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "policyId": {
+                    "type": "string",
+                    "default": "br3eze-a2a-default"
+                }
+            }
+        },
+        "rateLimiting": {
+            "type": "object",
+            "properties": {
+                "requestsPerMinute": {
+                    "type": "number",
+                    "default": 120
+                },
+                "burstSize": {
+                    "type": "number",
+                    "default": 20
+                }
+            }
+        }
+    }
+}
