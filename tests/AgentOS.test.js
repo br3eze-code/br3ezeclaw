@@ -43,9 +43,57 @@ jest.mock('routeros-client', () => ({
   }))
 }));
 
+// Mock Telegram bot — prevents real HTTP polling
+jest.mock('node-telegram-bot-api', () => {
+  return jest.fn().mockImplementation(() => ({
+    on: jest.fn(),
+    sendMessage: jest.fn().mockResolvedValue({}),
+    stopPolling: jest.fn().mockResolvedValue({}),
+    isPolling: jest.fn().mockReturnValue(false)
+  }));
+});
+
+// Mock WhatsApp / Baileys — prevents real WebSocket connections
+jest.mock('@whiskeysockets/baileys', () => ({
+  makeWASocket: jest.fn().mockReturnValue({
+    ev: { on: jest.fn(), off: jest.fn() },
+    sendMessage: jest.fn().mockResolvedValue({}),
+    logout: jest.fn().mockResolvedValue({}),
+    end: jest.fn(),
+    ws: { close: jest.fn() }
+  }),
+  useMultiFileAuthState: jest.fn().mockResolvedValue({
+    state: {},
+    saveCreds: jest.fn()
+  }),
+  DisconnectReason: { loggedOut: 401, restartRequired: 515 },
+  fetchLatestBaileysVersion: jest.fn().mockResolvedValue({ version: [2, 3000, 0], isLatest: true })
+}), { virtual: true });
+
+// Mock ChannelManager.initialize to skip real channel setup
+jest.mock('../src/core/channels/ChannelManager', () => {
+  const EventEmitter = require('events');
+  class MockChannelManager extends EventEmitter {
+    constructor(agent) {
+      super();
+      this.agent = agent;
+      this.channels = new Map();
+    }
+    async initialize() {}
+    async closeAll() {}
+    getStatus() { return {}; }
+    getRegisteredTypes() { return []; }
+    async send() {}
+    async broadcast() {}
+  }
+  MockChannelManager.adapters = new Map();
+  MockChannelManager.registerAdapter = jest.fn();
+  return MockChannelManager;
+});
+
 const AgentOS = require('../src/core/AgentOS');
 
-jest.setTimeout(60000);
+jest.setTimeout(30000);
 
 describe('AgentOS', () => {
   let agent;
@@ -72,7 +120,7 @@ describe('AgentOS', () => {
       params: { message: 'hello' },
       userId: 'test-user'
     });
-    
+
     expect(result.success).toBe(true);
   });
 
@@ -81,7 +129,7 @@ describe('AgentOS', () => {
       action: 'unknown.skill',
       userId: 'test-user'
     });
-    
+
     expect(result.success).toBe(false);
   });
 });
