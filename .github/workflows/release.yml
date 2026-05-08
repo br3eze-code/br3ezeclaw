@@ -1,0 +1,116 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '.github/dependabot.yml'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Auto-release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      released: ${{ steps.release.outputs.released }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+          registry-url: https://npm.pkg.github.com
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: Compute CalVer
+        id: version
+        run: |
+          # Format: YYYY.M.PATCH — patch = commit count today
+          TODAY=$(date -u +"%Y.%-m")
+          COUNT=$(git log --oneline --after="$(date -u +%Y-%m-%d)T00:00:00Z" | wc -l | tr -d ' ')
+          # Pad count so 0 → 1
+          PATCH=$((COUNT > 0 ? COUNT : 1))
+          NEW_VERSION="${TODAY}.${PATCH}"
+          CURRENT=$(node -p "require('./package.json').version")
+          echo "current=$CURRENT" >> $GITHUB_OUTPUT
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "AgentOS version: $NEW_VERSION (was $CURRENT)"
+
+      - name: Bump package.json
+        id: bump
+        run: |
+          CURRENT="${{ steps.version.outputs.current }}"
+          NEW="${{ steps.version.outputs.version }}"
+          if [ "$CURRENT" != "$NEW" ]; then
+            npm version "$NEW" --no-git-tag-version
+            echo "bumped=true" >> $GITHUB_OUTPUT
+          else
+            echo "bumped=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            LOG=$(git log --oneline -20 --pretty="- %s (%h)")
+          else
+            LOG=$(git log "${PREV_TAG}..HEAD" --oneline --pretty="- %s (%h)")
+          fi
+          echo "log<<EOF" >> $GITHUB_OUTPUT
+          echo "$LOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Commit version bump
+        if: steps.bump.outputs.bumped == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: bump version to ${{ steps.version.outputs.version }} [skip ci]"
+          git push
+
+      - name: Create GitHub Release
+        id: release
+        if: steps.bump.outputs.bumped == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: AgentOS v${{ steps.version.outputs.version }}
+          body: |
+            ## 🤖 AgentOS v${{ steps.version.outputs.version }}
+
+            **Network Intelligence Platform — MikroTik · Telegram · WhatsApp · AI**
+
+            ### Changes
+            ${{ steps.changelog.outputs.log }}
+
+            ### Install
+            ```bash
+            npm install br3eze-code@${{ steps.version.outputs.version }}
+            ```
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to GitHub Packages
+        if: steps.bump.outputs.bumped == 'true'
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
