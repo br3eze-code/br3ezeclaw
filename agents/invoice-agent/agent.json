@@ -1,0 +1,90 @@
+{
+    "id": "invoice-processor",
+    "name": "Invoice Processor",
+    "description": "Multi-purpose AgentOS agent: invoice processing, network management, and AI orchestration via Google Gemini Enterprise.",
+    "version": "1.1.0",
+
+    "ai": {
+        "provider": "google-gemini-enterprise",
+        "model": "gemini-2.0-flash-001",
+        "location": "us-central1",
+        "projectId": "${GOOGLE_CLOUD_PROJECT}",
+        "endpoint": "https://us-central1-aiplatform.googleapis.com",
+        "generationConfig": {
+            "temperature": 0.2,
+            "maxOutputTokens": 8192,
+            "topK": 40,
+            "topP": 0.95
+        },
+        "safetySettings": [
+            { "category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE" },
+            { "category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE" }
+        ]
+    },
+
+    "plugins": {
+        "@br3eze/a2a-protocol": {
+            "spiffeID": "spiffe://br3eze.prod/agent/invoice-processor",
+            "trustedAgents": [
+                {
+                    "spiffeID": "spiffe://google.adk/agent/gemini-planner",
+                    "endpoint": "https://us-central1-aiplatform.googleapis.com/v1beta1/projects/${GOOGLE_CLOUD_PROJECT}/locations/us-central1/agents/gemini-planner",
+                    "capabilities": ["plan", "decompose", "reason", "summarize"]
+                },
+                {
+                    "spiffeID": "spiffe://br3eze.prod/agent/network-agent",
+                    "endpoint": "http://network-agent.br3eze.svc.cluster.local:8080",
+                    "capabilities": ["mikrotik.createUser", "mikrotik.removeUser", "mikrotik.getActiveUsers"]
+                }
+            ],
+            "mTLS": {
+                "enabled": true,
+                "certPath": "/var/run/secrets/spiffe"
+            },
+            "modelArmor": {
+                "enabled": true,
+                "policyId": "br3eze-a2a-enterprise",
+                "endpoint": "${MODEL_ARMOR_ENDPOINT}"
+            },
+            "rateLimiting": {
+                "requestsPerMinute": 120,
+                "burstSize": 20
+            }
+        }
+    },
+
+    "capabilities": {
+        "process_invoice": {
+            "description": "Extract, validate, and plan invoice data using Gemini Enterprise",
+            "inputSchema": {
+                "required": ["pdf_url"],
+                "properties": {
+                    "pdf_url": { "type": "string", "description": "URL or GCS path to the invoice PDF" },
+                    "jurisdiction": { "type": "string", "description": "Tax jurisdiction override (optional)" }
+                }
+            },
+            "handler": "./handlers/processInvoice.js"
+        },
+        "query_network": {
+            "description": "Query network stats and active users via MikroTik",
+            "inputSchema": {
+                "required": ["query_type"],
+                "properties": {
+                    "query_type": { "type": "string", "enum": ["active_users", "stats", "interfaces", "dhcp"] }
+                }
+            },
+            "handler": "./handlers/queryNetwork.js"
+        },
+        "ask_ai": {
+            "description": "Route a natural language query to Gemini Enterprise AI",
+            "inputSchema": {
+                "required": ["query"],
+                "properties": {
+                    "query": { "type": "string" },
+                    "context": { "type": "object" }
+                }
+            },
+            "handler": "./handlers/askAI.js"
+        }
+    }
+}
