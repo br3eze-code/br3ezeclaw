@@ -1,160 +1,238 @@
 // ==========================================
 // AGENTOS VOUCHER COMMAND
-// Voucher management and generation
+// Voucher management — @clack/prompts edition
 // ==========================================
 
-const _chalk = require('chalk');
-const chalk  = _chalk.default || _chalk;
-const _ora = require('ora');
-const ora = _ora.default || _ora;
+'use strict';
+
+const fs   = require('fs');
 const QRCode = require('qrcode');
-const fs = require('fs');
+const { intro, outro, spinner, note, log, select, isCancel } = require('@clack/prompts');
 const { getDatabase } = require('../../core/database');
 
+// ── Plan definitions (mirrors 36.js CONFIG.VOUCHER_PLANS) ────────────────────
+const PLAN_DEFS = {
+  '1hour': { label: '1 Hour',   price: 1.00,  duration: '1h'  },
+  '1Day':  { label: '1 Day',    price: 5.00,  duration: '24h' },
+  '7Day':  { label: '7 Days',   price: 25.00, duration: '7d'  },
+  '30Day': { label: '30 Days',  price: 80.00, duration: '30d' },
+};
+
 module.exports = (program) => {
-    const voucher = program
-        .command('voucher')
-        .description('Manage access vouchers')
-        .alias('v');
+  const voucher = program
+    .command('voucher')
+    .description('Manage access vouchers')
+    .alias('v');
 
-    // Subcommand: voucher create
-    voucher
-        .command('create [plan]')
-        .description('Create new voucher')
-        .option('--duration <duration>', 'Duration (1h, 24h, 7d)', '1h')
-        .option('--qty <n>', 'Quantity to generate', '1')
-        .option('--qr', 'Generate QR code', false)
-        .action(async (plan, options) => {
-            const { BRAND, CONFIG_PATH } = global.AGENTOS;
+  // ── voucher create ────────────────────────────────────────────────────────
+  voucher
+    .command('create [plan]')
+    .description('Create a new voucher (interactive if plan omitted)')
+    .option('--duration <duration>', 'Override duration (1h, 24h, 7d)', '')
+    .option('--qty <n>', 'Quantity to generate', '1')
+    .option('--qr', 'Save QR code to file', false)
+    .action(async (plan, options) => {
+      const { BRAND, CONFIG_PATH } = global.AGENTOS;
 
-            if (!fs.existsSync(CONFIG_PATH)) {
-                console.log(chalk.red('✗ Run agentos onboard first'));
-                return;
-            }
+      if (!fs.existsSync(CONFIG_PATH)) {
+        log.error('Run agentos onboard first');
+        return;
+      }
 
-            const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-            const selectedPlan = plan || config.plans[0]?.name || 'default';
+      const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
 
-            const spinner = ora('Creating voucher...').start();
+      // Interactive plan selection when omitted
+      if (!plan) {
+        intro(`${BRAND.emoji}  Create Voucher`);
+        const choice = await select({
+          message: 'Select plan:',
+          options: Object.entries(PLAN_DEFS).map(([k, v]) => ({
+            value: k,
+            label: `${v.label.padEnd(10)}  $${v.price.toFixed(2)}`,
+            hint:  v.duration,
+          })),
+        });
+        if (isCancel(choice)) { log.warn('Cancelled.'); return; }
+        plan = choice;
+      }
 
-            try {
-                const db = await getDatabase();
-                const vouchers = [];
+      const planDef = PLAN_DEFS[plan] || { label: plan, price: 0, duration: options.duration || '1h' };
+      const duration = options.duration || planDef.duration;
+      const qty = Math.max(1, parseInt(options.qty) || 1);
 
-                for (let i = 0; i < parseInt(options.qty); i++) {
-                    const code = `AGENT-${require('crypto').randomBytes(3).toString('hex').toUpperCase()}`;
-                    await db.createVoucher(code, {
-                        plan: selectedPlan,
-                        duration: options.duration,
-                        createdAt: new Date(),
-                        createdBy: 'cli'
-                    });
+      const s = spinner();
+      s.start(`Generating ${qty} voucher(s)…`);
 
-                    vouchers.push({ code, plan: selectedPlan });
-                }
+      try {
+        const db = await getDatabase();
+        const voucherAgent = require('../../core/voucher');
+        const created = [];
 
-                spinner.succeed(`Created ${vouchers.length} voucher(s)`);
+        for (let i = 0; i < qty; i++) {
+          const code = voucherAgent.generate(plan);
+          await db.createVoucher(code, {
+            plan, duration,
+            createdAt: new Date(),
+            createdBy: 'cli',
+          });
+          created.push(code);
 
-                console.log(chalk.cyan('\n🎟 Voucher Codes:\n'));
+          // Auto-print voucher
+          try {
+            const { printVoucher } = require('../../core/printer');
+            const loginUrl = `http://${config.mikrotik?.ip || config.adapters?.mikrotik?.host}/login.html?code=${code}`;
+            printVoucher({
+              username: code,
+              password: code,
+              profile: planDef.label,
+              loginUrl: loginUrl
+            }).catch(e => log.warn('Thermal print failed: ' + e.message));
+          } catch (err) {}
+        }
 
-                for (const v of vouchers) {
-                    console.log(chalk.bold(`  ${v.code}`));
-                    console.log(chalk.gray(`  Plan: ${v.plan} | Duration: ${options.duration}`));
+        s.stop(`Created ${created.length} voucher(s)`);
 
-                    if (options.qr) {
-                        const qrData = JSON.stringify({
-                            code: v.code,
-                            plan: v.plan,
-                            url: `http://${config.mikrotik.ip}/login.html?code=${v.code}`
-                        });
+        for (const code of created) {
+          note(
+            [
+              `Code  :  ${code}`,
+              `Plan  :  ${planDef.label}`,
+              `Price :  $${planDef.price.toFixed(2)}`,
+              `Valid :  ${duration}`,
+            ].join('\n'),
+            '🎫 New Voucher'
+          );
 
-                        const qrPath = `${global.AGENTOS.STATE_PATH}/qr-${v.code}.png`;
-                        await QRCode.toFile(qrPath, qrData);
-                        console.log(chalk.gray(`  QR saved: ${qrPath}`));
-                    }
+          if (options.qr) {
+            const qrData = JSON.stringify({
+              code,
+              plan,
+              url: `http://${config.mikrotik?.ip || config.adapters?.mikrotik?.host}/login.html?code=${code}`,
+            });
+            const qrPath = `${global.AGENTOS.STATE_PATH}/qr-${code}.png`;
+            await QRCode.toFile(qrPath, qrData);
+            log.info(`QR saved: ${qrPath}`);
+          }
+        }
 
-                    console.log('');
-                }
+        outro('Voucher generation complete.');
+      } catch (error) {
+        s.stop(`Failed: ${error.message}`);
+        log.error(error.message);
+      }
+    });
 
-            } catch (error) {
-                spinner.fail(chalk.red(`Failed: ${error.message}`));
-            }
+  // ── voucher list ──────────────────────────────────────────────────────────
+  voucher
+    .command('list')
+    .description('List recent vouchers')
+    .option('--limit <n>', 'Number to show', '10')
+    .option('--used', 'Show only used vouchers')
+    .option('--active', 'Show only active vouchers')
+    .action(async (options) => {
+      const s = spinner();
+      s.start('Fetching vouchers…');
+
+      try {
+        const db = await getDatabase();
+        let vouchers = await db.getRecentVouchers(parseInt(options.limit));
+        if (options.used)   vouchers = vouchers.filter(v => v.used);
+        if (options.active) vouchers = vouchers.filter(v => !v.used);
+        s.stop(`${vouchers.length} voucher(s) found`);
+
+        if (!vouchers.length) {
+          log.warn('No vouchers match the filter.');
+          return;
+        }
+
+        const lines = vouchers.map((v, i) => {
+          const tag = v.used ? '✓ Used  ' : '○ Active';
+          const date = v.createdAt?.toDate?.() || v.createdAt || '—';
+          return `${String(i + 1).padStart(2)}. [${tag}]  ${(v.id || v.code || '').padEnd(18)}  ${(v.plan || '').padEnd(8)}  ${date}`;
         });
 
-    // Subcommand: voucher list
-    voucher
-        .command('list')
-        .description('List recent vouchers')
-        .option('--limit <n>', 'Number to show', '10')
-        .option('--used', 'Show only used vouchers')
-        .option('--active', 'Show only active vouchers')
-        .action(async (options) => {
-            try {
-                const db = await getDatabase();
-                const vouchers = await db.getRecentVouchers(parseInt(options.limit));
+        note(lines.join('\n'), `🎟  Vouchers (${vouchers.length})`);
+        outro('Done.');
+      } catch (error) {
+        log.error(`Failed: ${error.message}`);
+      }
+    });
 
-                let filtered = vouchers;
-                if (options.used) filtered = vouchers.filter(v => v.used);
-                if (options.active) filtered = vouchers.filter(v => !v.used);
+  // ── voucher revoke ────────────────────────────────────────────────────────
+  voucher
+    .command('revoke <code>')
+    .description('Revoke an unused voucher')
+    .action(async (code) => {
+      const s = spinner();
+      s.start(`Revoking ${code}…`);
+      try {
+        const db = await getDatabase();
+        const v = await db.getVoucher(code);
 
-                console.log(chalk.cyan(`\n📋 Vouchers (${filtered.length})\n`));
+        if (!v) { s.stop('Voucher not found'); log.error('Voucher not found'); return; }
+        if (v.used) { s.stop('Already used'); log.warn('Voucher already used — cannot revoke'); return; }
 
-                filtered.forEach((v, i) => {
-                    const status = v.used ? chalk.green('✓ Used') : chalk.yellow('○ Active');
-                    const date = v.createdAt?.toDate?.() || v.createdAt;
-                    console.log(`  ${i + 1}. ${v.id || v.code} | ${v.plan} | ${status}`);
-                    console.log(`     Created: ${date}\n`);
-                });
+        await db.deleteVoucher(code);
+        s.stop(`Revoked: ${code}`);
+        outro('Done.');
+      } catch (error) {
+        log.error(`Failed: ${error.message}`);
+      }
+    });
 
-            } catch (error) {
-                console.log(chalk.red(`Failed: ${error.message}`));
-            }
-        });
+  // ── voucher debug ─────────────────────────────────────────────────────────
+  voucher
+    .command('debug')
+    .description('Voucher system diagnostics')
+    .action(async () => {
+      const { BRAND, CONFIG_PATH } = global.AGENTOS;
+      intro(`${BRAND.emoji}  Voucher Diagnostics`);
 
-    // Subcommand: voucher revoke
-    voucher
-        .command('revoke <code>')
-        .description('Revoke unused voucher')
-        .action(async (code) => {
-            try {
-                const db = await getDatabase();
-                const voucher = await db.getVoucher(code);
+      const checks = [];
+      const s = spinner();
 
-                if (!voucher) {
-                    console.log(chalk.red('✗ Voucher not found'));
-                    return;
-                }
+      // Config
+      s.start('Checking configuration…');
+      if (!fs.existsSync(CONFIG_PATH)) {
+        s.stop('Config missing');
+        checks.push({ name: 'Config', status: 'error', details: 'Run agentos onboard' });
+      } else {
+        const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+        s.stop('Config valid');
+        checks.push({ name: 'Config', status: 'ok', details: `prefix: ${cfg.vouchers?.prefix || 'STAR'}` });
+      }
 
-                if (voucher.used) {
-                    console.log(chalk.yellow('⚠ Voucher already used - cannot revoke'));
-                    return;
-                }
+      // Database
+      s.start('Checking database…');
+      try {
+        const db = await getDatabase();
+        const stats = await db.getStats();
+        s.stop('Database reachable');
+        checks.push({ name: 'Database', status: 'ok', details: `${db.db ? 'Firebase' : 'Local'}  ${stats.total} total, ${stats.active} active` });
+      } catch (e) {
+        s.stop(`Database error: ${e.message}`);
+        checks.push({ name: 'Database', status: 'error', details: e.message });
+      }
 
-                await db.deleteVoucher(code);
-                console.log(chalk.green(`✓ Revoked voucher: ${code}`));
+      // Generation dry-run
+      s.start('Dry-run voucher generation…');
+      try {
+        const voucherAgent = require('../../core/voucher');
+        const sample = voucherAgent.generate('default');
+        s.stop(`Sample: ${sample}`);
+        checks.push({ name: 'Generator', status: 'ok', details: `sample → ${sample}` });
+      } catch (e) {
+        s.stop(`Generator error: ${e.message}`);
+        checks.push({ name: 'Generator', status: 'error', details: e.message });
+      }
 
-            } catch (error) {
-                console.log(chalk.red(`Failed: ${error.message}`));
-            }
-        });
+      const lines = checks.map(c => {
+        const icon = c.status === 'ok' ? '●' : c.status === 'warn' ? '▲' : '■';
+        return `${icon} ${c.name.padEnd(12)} ${c.details || ''}`;
+      });
+      note(lines.join('\n'), '📋 Diagnostics');
 
-    // Subcommand: voucher stats
-    voucher
-        .command('stats')
-        .description('Voucher statistics')
-        .action(async () => {
-            try {
-                const db = await getDatabase();
-                const stats = await db.getStats();
-
-                console.log(chalk.cyan('\n📊 Voucher Statistics\n'));
-                console.log(`  Total:  ${stats.total}`);
-                console.log(`  Active: ${stats.active}`);
-                console.log(`  Used:   ${stats.used}`);
-                console.log(`  Rate:   ${stats.total > 0 ? Math.round((stats.used / stats.total) * 100) : 0}% redemption\n`);
-
-            } catch (error) {
-                console.log(chalk.red(`Failed: ${error.message}`));
-            }
-        });
+      const errors = checks.filter(c => c.status === 'error').length;
+      outro(errors === 0 ? '✓ Voucher system is healthy.' : `✗ ${errors} issue(s) found.`);
+    });
 };

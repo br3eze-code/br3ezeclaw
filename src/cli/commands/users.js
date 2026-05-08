@@ -1,155 +1,204 @@
 // ==========================================
 // AGENTOS USERS COMMAND
-// Hotspot user management
+// Hotspot user management — @clack/prompts edition
 // ==========================================
 
-const _chalk = require('chalk');
-const chalk  = _chalk.default || _chalk;
-const _ora = require('ora');
-const ora = _ora.default || _ora;
+'use strict';
+
+const { intro, outro, spinner, note, log, confirm, isCancel } = require('@clack/prompts');
 const { getMikroTikClient } = require('../../core/mikrotik');
 
 module.exports = (program) => {
-    const users = program
-        .command('users')
-        .description('Manage hotspot users')
-        .alias('user');
+  const users = program
+    .command('users')
+    .description('Manage hotspot users')
+    .alias('user');
 
-    // Subcommand: users list
-    users
-        .command('list')
-        .description('List active hotspot users')
-        .option('--all, -a', 'Show all users (not just active)')
-        .option('--limit, -l <n>', 'Limit results', '20')
-        .action(async (options) => {
-            try {
-                const mikrotik = await getMikroTikClient();
+  // ── users list ────────────────────────────────────────────────────────────
+  users
+    .command('list')
+    .description('List active hotspot users')
+    .option('--all, -a', 'Show all users (not just active)')
+    .option('--limit, -l <n>', 'Limit results', '20')
+    .action(async (options) => {
+      const s = spinner();
+      s.start(options.all ? 'Fetching all hotspot users…' : 'Fetching active sessions…');
 
-                if (options.all) {
-                    const allUsers = await mikrotik.getAllHotspotUsers();
-                    console.log(chalk.cyan(`\n📋 All Hotspot Users (${allUsers.length})\n`));
+      try {
+        const mikrotik = await getMikroTikClient();
+        const limit = parseInt(options.limit) || 20;
 
-                    allUsers.slice(0, parseInt(options.limit)).forEach((user, i) => {
-                        const status = user.disabled === 'yes' ? chalk.red('disabled') : chalk.green('enabled');
-                        console.log(`  ${i + 1}. ${user.name} (${user.profile}) - ${status}`);
-                    });
-                } else {
-                    const activeUsers = await mikrotik.getActiveUsers();
-                    console.log(chalk.cyan(`\n👥 Active Users (${activeUsers.length})\n`));
+        if (options.all) {
+          const all = await mikrotik.getAllHotspotUsers();
+          s.stop(`${all.length} users found`);
 
-                    if (activeUsers.length === 0) {
-                        console.log(chalk.gray('  No active users'));
-                        return;
-                    }
+          if (!all.length) { log.warn('No hotspot users configured.'); return; }
 
-                    activeUsers.forEach((user, i) => {
-                        const dataIn = formatBytes(user['bytes-in'] || 0);
-                        const dataOut = formatBytes(user['bytes-out'] || 0);
+          const lines = all.slice(0, limit).map((u, i) => {
+            const status = u.disabled === 'yes' ? '🔴 disabled' : '🟢 enabled ';
+            return `${String(i + 1).padStart(2)}. ${status}  ${(u.name || '').padEnd(18)}  ${u.profile || 'default'}`;
+          });
+          if (all.length > limit) lines.push(`   … and ${all.length - limit} more`);
 
-                        console.log(`  ${i + 1}. ${chalk.bold(user.user)}`);
-                        console.log(`     IP: ${user.address} | MAC: ${user['mac-address']}`);
-                        console.log(`     Uptime: ${user.uptime} | Data: ↓${dataIn} ↑${dataOut}\n`);
-                    });
-                }
+          note(lines.join('\n'), `📋 All Hotspot Users (${all.length})`);
+        } else {
+          const active = await mikrotik.getActiveUsers();
+          s.stop(`${active.length} active session(s)`);
 
-            } catch (error) {
-                console.log(chalk.red(`Failed: ${error.message}`));
-            }
-        });
+          if (!active.length) { log.warn('No active sessions.'); return; }
 
-    // Subcommand: users kick
-    users
-        .command('kick <username>')
-        .description('Disconnect active user')
-        .action(async (username) => {
-            const spinner = ora(`Kicking ${username}...`).start();
+          const lines = active.slice(0, limit).map((u, i) => {
+            const dataIn  = formatBytes(u['bytes-in']  || 0);
+            const dataOut = formatBytes(u['bytes-out'] || 0);
+            return [
+              `${String(i + 1).padStart(2)}. ${(u.user || '').padEnd(18)}  ${u.address || ''}`,
+              `    MAC: ${u['mac-address'] || '—'}  Uptime: ${u.uptime || '—'}  ↓${dataIn} ↑${dataOut}`,
+            ].join('\n');
+          });
 
-            try {
-                const mikrotik = await getMikroTikClient();
-                const kicked = await mikrotik.kickUser(username);
+          note(lines.join('\n'), `👥 Active Sessions (${active.length})`);
+        }
 
-                if (kicked) {
-                    spinner.succeed(chalk.green(`✓ User ${username} kicked`));
-                } else {
-                    spinner.warn(chalk.yellow(`User ${username} not active`));
-                }
+        outro('Done.');
+      } catch (error) {
+        log.error(`Failed: ${error.message}`);
+      }
+    });
 
-            } catch (error) {
-                spinner.fail(chalk.red(`Failed: ${error.message}`));
-            }
-        });
+  // ── users kick ────────────────────────────────────────────────────────────
+  users
+    .command('kick <username>')
+    .description('Disconnect an active user')
+    .action(async (username) => {
+      const s = spinner();
+      s.start(`Kicking ${username}…`);
+      try {
+        const mikrotik = await getMikroTikClient();
+        const kicked = await mikrotik.kickUser(username);
+        if (kicked) {
+          s.stop(`${username} disconnected`);
+          outro(`✓ ${username} kicked.`);
+        } else {
+          s.stop(`${username} not found in active sessions`);
+          log.warn(`User "${username}" is not currently active.`);
+        }
+      } catch (error) {
+        log.error(`Failed: ${error.message}`);
+      }
+    });
 
-    // Subcommand: users add
-    users
-        .command('add <username> [password]')
-        .description('Add hotspot user')
-        .option('--profile <profile>', 'User profile/plan', 'default')
-        .action(async (username, password, options) => {
-            const pass = password || username; // Default password = username
+  // ── users add ─────────────────────────────────────────────────────────────
+  users
+    .command('add <username> [password]')
+    .description('Add a hotspot user')
+    .option('--profile <profile>', 'User profile / plan', 'default')
+    .action(async (username, password, options) => {
+      const pass = password || username;
+      const s = spinner();
+      s.start(`Creating user "${username}" (profile: ${options.profile})…`);
+      try {
+        const mikrotik = await getMikroTikClient();
+        await mikrotik.addHotspotUser(username, pass, options.profile);
+        s.stop(`User "${username}" created`);
+        note(
+          [`Username :  ${username}`, `Profile  :  ${options.profile}`].join('\n'),
+          '✅ User Added'
+        );
+        outro('Done.');
+      } catch (error) {
+        log.error(`Failed: ${error.message}`);
+      }
+    });
 
-            try {
-                const mikrotik = await getMikroTikClient();
-                await mikrotik.addHotspotUser(username, pass, options.profile);
-                console.log(chalk.green(`✓ Created user: ${username} (profile: ${options.profile})`));
-            } catch (error) {
-                console.log(chalk.red(`Failed: ${error.message}`));
-            }
-        });
+  // ── users remove ──────────────────────────────────────────────────────────
+  users
+    .command('remove <username>')
+    .description('Remove a hotspot user')
+    .option('--force, -f', 'Force removal even if currently active')
+    .action(async (username, options) => {
+      try {
+        const mikrotik = await getMikroTikClient();
 
-    // Subcommand: users remove
-    users
-        .command('remove <username>')
-        .description('Remove hotspot user')
-        .option('--force, -f', 'Force removal even if active')
-        .action(async (username, options) => {
-            try {
-                const mikrotik = await getMikroTikClient();
+        if (!options.force) {
+          const active = await mikrotik.getUserStatus(username);
+          if (active) {
+            const ok = await confirm({
+              message: `${username} is currently active. Remove anyway?`,
+              initialValue: false,
+            });
+            if (isCancel(ok) || !ok) { log.warn('Cancelled.'); return; }
+          }
+        }
 
-                if (!options.force) {
-                    const active = await mikrotik.getUserStatus(username);
-                    if (active) {
-                        console.log(chalk.yellow(`⚠ User ${username} is currently active. Use --force to remove anyway.`));
-                        return;
-                    }
-                }
+        const s = spinner();
+        s.start(`Removing "${username}"…`);
+        await mikrotik.removeHotspotUser(username);
+        s.stop(`"${username}" removed`);
+        outro('Done.');
+      } catch (error) {
+        log.error(`Failed: ${error.message}`);
+      }
+    });
 
-                await mikrotik.removeHotspotUser(username);
-                console.log(chalk.green(`✓ Removed user: ${username}`));
+  // ── users status ──────────────────────────────────────────────────────────
+  users
+    .command('status <username>')
+    .description('Check user connection status')
+    .action(async (username) => {
+      const s = spinner();
+      s.start(`Looking up ${username}…`);
+      try {
+        const mikrotik = await getMikroTikClient();
+        const status = await mikrotik.getUserStatus(username);
+        s.stop(status ? `${username} is ONLINE` : `${username} is OFFLINE`);
 
-            } catch (error) {
-                console.log(chalk.red(`Failed: ${error.message}`));
-            }
-        });
+        if (status) {
+          note(
+            [
+              `User    :  ${username}`,
+              `IP      :  ${status.address}`,
+              `MAC     :  ${status['mac-address']}`,
+              `Uptime  :  ${status.uptime}`,
+              `Data    :  ↓${formatBytes(status['bytes-in'] || 0)}  ↑${formatBytes(status['bytes-out'] || 0)}`,
+            ].join('\n'),
+            '🟢 Online Session'
+          );
+        } else {
+          log.warn(`${username} is offline.`);
+        }
+        outro('Done.');
+      } catch (error) {
+        log.error(`Failed: ${error.message}`);
+      }
+    });
 
-    // Subcommand: users status
-    users
-        .command('status <username>')
-        .description('Check user connection status')
-        .action(async (username) => {
-            try {
-                const mikrotik = await getMikroTikClient();
-                const status = await mikrotik.getUserStatus(username);
-
-                if (status) {
-                    console.log(chalk.green(`\n✓ ${username} is ONLINE\n`));
-                    console.log(`  IP: ${status.address}`);
-                    console.log(`  MAC: ${status['mac-address']}`);
-                    console.log(`  Uptime: ${status.uptime}`);
-                    console.log(`  Data: ↓${formatBytes(status['bytes-in'] || 0)} ↑${formatBytes(status['bytes-out'] || 0)}`);
-                } else {
-                    console.log(chalk.yellow(`\n○ ${username} is OFFLINE\n`));
-                }
-
-            } catch (error) {
-                console.log(chalk.red(`Failed: ${error.message}`));
-            }
-        });
+  // ── users transfer ────────────────────────────────────────────────────────
+  users
+    .command('transfer <from> <to> <amount>')
+    .description('Transfer credits between users (P2P)')
+    .action(async (from, to, amount) => {
+      const s = spinner();
+      s.start(`Transferring ${amount} credits  ${from} → ${to}…`);
+      try {
+        const { getDatabase } = require('../../core/database');
+        const db = await getDatabase();
+        await db.p2pTransfer(from, to, parseFloat(amount));
+        s.stop('Transfer complete');
+        note(
+          [`From   :  ${from}`, `To     :  ${to}`, `Amount :  ${amount} credits`].join('\n'),
+          '💸 Transfer Complete'
+        );
+        outro('Done.');
+      } catch (error) {
+        log.error(`Transfer failed: ${error.message}`);
+      }
+    });
 };
 
+// ── Utility ───────────────────────────────────────────────────────────────────
 function formatBytes(bytes) {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }

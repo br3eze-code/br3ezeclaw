@@ -9,103 +9,193 @@ const { QNAPProcessor } = require('./qnap-integration');
 class AICoordinator extends EventEmitter {
   constructor(config = {}) {
     super();
+    this.config = config;
     this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    this.model = this.genAI.getGenerativeModel({ 
-      model: "gemini-2.5-flash-preview-04-09",
-      systemInstruction: this.getSystemPrompt()
-    });
-    
+    this.skillRegistry = new (require('../core/skills/SkillRegistry'))();
     this.qnap = new QNAPProcessor();
     this.conversationContext = new Map(); // Context per user
     this.toolRegistry = new Map();
+    this.toolToSkillMap = new Map(); // toolName -> skillName
+
+    // Inject MikroTik Manager
+    const { getManager } = require('../core/mikrotik');
+    this.mikrotik = getManager();
+
+    this.model = this.genAI.getGenerativeModel({
+      model: "gemini-2.0-flash-exp",
+      systemInstruction: this.getSystemPrompt()
+    });
+
+    this._registerStaticTools();
+    this._initSkills();
+  }
+
+  async _initSkills() {
+    const path = require('path');
+    const skillsPath = path.join(__dirname, '../skills');
+    await this.skillRegistry.loadFromDirectory(skillsPath);
     
-    this._registerTools();
+    // Build tool-to-skill map
+    for (const manifest of this.skillRegistry.list()) {
+      if (manifest.tools) {
+        if (Array.isArray(manifest.tools)) {
+          manifest.tools.forEach(t => this.toolToSkillMap.set(t.name, manifest.name));
+        } else {
+          Object.keys(manifest.tools).forEach(tn => this.toolToSkillMap.set(tn, manifest.name));
+        }
+      }
+    }
+
+    logger.info(`AICoordinator: Loaded ${this.skillRegistry.skills.size} skills and ${this.toolToSkillMap.size} tools`);
+
+    // Refresh model with new system prompt containing all loaded tools
+    this.model = this.genAI.getGenerativeModel({
+      model: "gemini-2.0-flash-exp",
+      systemInstruction: this.getSystemPrompt()
+    });
   }
 
   getSystemPrompt() {
-    return `You are AgentOS, an AI network administrator for MikroTik routers.
-You control hotspot users, generate vouchers, monitor system stats, and manage network security.
-
+    let prompt = `You manage network infrastructure, CCTV systems, and IoT devices via unified skills.
 Available tools:
-- user.add(username, password, profile) - Create hotspot user
-- user.kick(username) - Disconnect active user
-- users.active() - List active sessions
-- system.stats() - Get router stats
-- system.reboot() - Restart router
-- voucher.create(plan) - Generate WiFi voucher (plans: 1hour, 1day, 1week)
-- ping(host) - Network test
-- firewall.block(ip) - Block address
+${this._getToolsDescription()}
+`;
 
-Respond naturally but include structured data when tools are needed.
-If a user asks for a voucher, create it immediately without asking confirmation.
-If rebooting, always ask for confirmation first.`;
-  }
-
-  _registerTools() {
-    const { getManager } = require('../core/mikrotik');
-    const { getDatabase } = require('../core/database');
-
-    // Register all MikroTik tools
-    const mt = getManager();
-    const tools = [
-      'user.add', 'user.kick', 'users.active', 'user.status',
-      'system.stats', 'system.reboot', 'ping', 'firewall.block'
-    ];
-
-    tools.forEach(name => {
-      this.toolRegistry.set(name, async (params) => {
-        try {
-          return await mt.executeTool(name, params);
-        } catch (error) {
-          throw new Error(`Tool ${name} failed: ${error.message}`);
+    if (this.skillRegistry) {
+      for (const manifest of this.skillRegistry.list()) {
+        if (manifest.tools) {
+          for (const [toolName, tool] of Object.entries(manifest.tools)) {
+            prompt += `- ${toolName}: ${tool.description}\n`;
+          }
         }
-      });
-    });
-
-    // Register voucher tool with neural fraud detection
-    this.toolRegistry.set('voucher.create', async (params) => {
-      // Q-NAP Fraud Detection
-      const fraudCheck = await this.qnap.analyzeTransaction({
-        userId: params.chatId,
-        amount: this._getPlanPrice(params.plan),
-        timestamp: Date.now(),
-        deviceFingerprint: params.fingerprint
-      });
-
-      if (fraudCheck.riskScore > 0.8) {
-        logger.audit('fraud_detected', { plan: params.plan, risk: fraudCheck.riskScore });
-        throw new Error('Transaction flagged for review');
       }
+    }
 
-      const db = await getDatabase();
-      const code = this._generateVoucherCode();
-      
-      await db.createVoucher(code, {
-        plan: params.plan,
-        createdBy: 'telegram_bot',
-        fraudScore: fraudCheck.riskScore
-      });
+    prompt += `\nRespond naturally but include structured data when tools are needed.
+If a user asks for a voucher, create it immediately without asking confirmation.
+If rebooting or performing high-risk actions, always ask for confirmation first.
+When managing CCTV, you can target specific devices by their deviceId.`;
 
-      // Generate QR code
-      const QRCode = require('qrcode');
-      const qrData = await QRCode.toDataURL(`WIFI:T:WPA;S:AgentOS;P:${code};;`);
-      
-      return {
-        success: true,
-        code,
-        plan: params.plan,
-        expiresAt: this._getExpiryDate(params.plan),
-        qrCode: qrData.split(',')[1], // Remove data:image prefix
-        fraudCheck: fraudCheck.riskScore < 0.3 ? 'passed' : 'review'
-      };
-    });
+    return prompt;
   }
+
+  _getToolsDescription() {
+    let desc = '';
+    // Add static tools
+    this.toolRegistry.forEach((tool, name) => {
+      desc += `- ${name}: ${tool.description || 'System tool'}\n`;
+    });
+
+    // Add dynamic skills
+    if (this.skillRegistry) {
+      for (const manifest of this.skillRegistry.list()) {
+        if (manifest.tools) {
+          // If tools is array (YAML format)
+          if (Array.isArray(manifest.tools)) {
+            manifest.tools.forEach(t => {
+              desc += `- ${t.name}: ${t.description}\n`;
+            });
+          } else {
+            // If tools is object (JSON format)
+            for (const [toolName, tool] of Object.entries(manifest.tools)) {
+              desc += `- ${toolName}: ${tool.description}\n`;
+            }
+          }
+        } else if (manifest.description) {
+          desc += `- ${manifest.name}: ${manifest.description}\n`;
+        }
+      }
+    }
+    return desc;
+  }
+
+  _registerStaticTools() {
+    // Voucher tool remains static for now as it involves complex logic/QR generation
+    this.toolRegistry.set('voucher.create', {
+      description: 'Generate WiFi voucher (plans: 1hour, 1day, 1week)',
+      execute: async (params) => {
+        // Q-NAP Fraud Detection
+        const fraudCheck = await this.qnap.analyzeTransaction({
+          userId: params.chatId,
+          amount: this._getPlanPrice(params.plan),
+          timestamp: Date.now(),
+          deviceFingerprint: params.fingerprint
+        });
+
+        if (fraudCheck.riskScore > 0.8) {
+          logger.audit('fraud_detected', { plan: params.plan, risk: fraudCheck.riskScore });
+          throw new Error('Transaction flagged for review');
+        }
+
+        const { getDatabase } = require('../core/database');
+        const db = await getDatabase();
+        const voucherAgent = require('../core/voucher');
+        const code = voucherAgent.generate(params.plan || '1hour');
+
+        const { DEFAULT_PLANS } = require('../core/database');
+        const dateUtils = require('../utils/date');
+        
+        const planObj = DEFAULT_PLANS[params.plan] || { name: 'Custom', deviceLimit: 1 };
+        const expiresAt = planObj.durationValue && planObj.durationUnit ?
+            dateUtils.add(new Date(), planObj.durationValue, planObj.durationUnit).toISOString() : null;
+        
+        const loginUrl = `http://${this.mikrotik?.state?.host || 'hotspot.local'}/login?username=${code}&password=${code}`;
+        
+        const vData = { 
+            plan: params.plan,
+            planName: planObj.name || params.plan,
+            durationUnit: planObj.durationUnit || null,
+            durationValue: planObj.durationValue || null,
+            deviceLimit: planObj.deviceLimit || 1,
+            expiresAt,
+            loginUrl,
+            createdBy: 'telegram_bot',
+            fraudScore: fraudCheck.riskScore
+        };
+        
+        await db.createVoucher(code, vData);
+        
+        if (this.mikrotik && this.mikrotik.state?.isConnected) {
+            const _durationToMikrotik = (p) => {
+                if (!p || !p.durationValue || !p.durationUnit) return null;
+                const v = p.durationValue;
+                switch (p.durationUnit) {
+                    case 'weeks': return `${v}w`;
+                    case 'days': return `${v}d`;
+                    case 'hours': return `${String(v).padStart(2, '0')}:00:00`;
+                    case 'minutes': return `${String(Math.floor(v / 60)).padStart(2, '0')}:${String(v % 60).padStart(2, '0')}:00`;
+                    default: return null;
+                }
+            };
+            await this.mikrotik.addHotspotUser({
+                username: code, password: code, profile: params.plan,
+                sharedUsers: vData.deviceLimit,
+                ...(vData.expiresAt && { limitUptime: _durationToMikrotik(vData) })
+            }).catch(() => { });
+        }
+
+        // Generate QR code
+        const QRCode = require('qrcode');
+        const qrData = await QRCode.toDataURL(`WIFI:T:WPA;S:AgentOS;P:${code};;`);
+
+        return {
+          success: true,
+          code,
+          plan: params.plan,
+          expiresAt: this._getExpiryDate(params.plan),
+          qrCode: qrData.split(',')[1], // Remove data:image prefix
+          fraudCheck: fraudCheck.riskScore < 0.3 ? 'passed' : 'review'
+        };
+      }         // close execute fn
+    });           // close {description, execute} object + toolRegistry.set call
+  }               // close _registerStaticTools
+
 
   async processQuery(text, context = {}) {
     try {
       // Neural intent classification
       const intent = await this.qnap.classifyIntent(text);
-      
+
       // If high confidence direct command, execute immediately
       if (intent.confidence > 0.9 && intent.action !== 'unknown') {
         return await this.executeDirectCommand(intent, context);
@@ -123,7 +213,7 @@ If rebooting, always ask for confirmation first.`;
 
       const result = await chat.sendMessage(text);
       const response = result.response.text();
-      
+
       // Parse tool calls from response if present
       const toolCall = this.parseToolCall(response);
       if (toolCall) {
@@ -136,22 +226,22 @@ If rebooting, always ask for confirmation first.`;
       }
 
       return { response, suggestions: ['Show users', 'Create voucher', 'System stats'] };
-      
+
     } catch (error) {
       logger.error('AI Coordinator error:', error);
-      return { 
-        error: true, 
-        message: 'AI processing failed. Please use manual commands like /users or /voucher 1day' 
+      return {
+        error: true,
+        message: 'AI processing failed. Please use manual commands like /users or /voucher 1day'
       };
     }
   }
 
   async processCommand(command, params) {
-    if (this.toolRegistry.has(command)) {
-      return await this.toolRegistry.get(command)(params);
+    const tool = this.toolRegistry.get(command);
+    if (tool?.execute) {
+      return await tool.execute(params);
     }
-    
-    // Fallback to parsing
+    // Fallback to NLU parsing
     return await this.processQuery(command, params);
   }
 
@@ -168,10 +258,31 @@ If rebooting, always ask for confirmation first.`;
     return null;
   }
 
-  async executeTool(name, params) {
+  async executeTool(name, params, context = {}) {
+    // 1. Check static toolRegistry
     const tool = this.toolRegistry.get(name);
-    if (!tool) throw new Error(`Unknown tool: ${name}`);
-    return await tool(params);
+    if (tool) return await tool.execute(params, context);
+
+    // 2. Check toolToSkillMap (Individual tools like 'user.kick')
+    const skillName = this.toolToSkillMap.get(name);
+    if (skillName) {
+      return await this.skillRegistry.execute(skillName, name, params, {
+        ...context,
+        logger,
+        mikrotik: this.mikrotik
+      });
+    }
+
+    // 3. Check SkillRegistry (Direct skill names like 'mikrotik')
+    if (this.skillRegistry.skills.has(name)) {
+      return await this.skillRegistry.execute(name, params, {
+        ...context,
+        logger,
+        mikrotik: this.mikrotik
+      });
+    }
+
+    throw new Error(`Unknown tool: ${name}`);
   }
 
   getConversationHistory(userId) {
@@ -179,17 +290,8 @@ If rebooting, always ask for confirmation first.`;
     return this.conversationContext.get(userId) || [];
   }
 
-  _generateVoucherCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No ambiguous chars
-    let code = '';
-    for (let i = 0; i < 8; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return code;
-  }
-
   _getPlanPrice(plan) {
-    const prices = { '1hour': 0.5, '1day': 2, '1week': 10 };
+    const prices = { '1hour': 0.5, '1day': 2, '1week': 10, '1month': 30 };
     return prices[plan] || 2;
   }
 
@@ -206,7 +308,7 @@ If rebooting, always ask for confirmation first.`;
       'voucher.create': (r) => `Created voucher ${r.code} (${r.plan})`,
       'system.stats': (r) => `CPU: ${r['cpu-load']}%, Uptime: ${r.uptime}`
     };
-    
+
     return formatters[toolName] ? formatters[toolName](result) : JSON.stringify(result);
   }
 
@@ -238,13 +340,13 @@ If rebooting, always ask for confirmation first.`;
   }
   async processInteraction(msg, context = {}) {
     logger.debug(`Processing interaction from ${context.channel || 'unknown'}: ${msg.text}`);
-    
-    const result = await this.processQuery(msg.text, { 
+
+    const result = await this.processQuery(msg.text, {
       userId: msg.userId,
       channel: context.channel,
       ...context
     });
-    
+
     return {
       success: !result.error,
       result: {
