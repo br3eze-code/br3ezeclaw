@@ -66,7 +66,7 @@ describe('AgentOSError — constructor', () => {
     });
 
     test('stores custom details', () => {
-        const details = { tool: 'ping', host: '1.2.3.4' };
+        const details = { tool: 'ping', host: '192.0.2.1' };
         const err = new AgentOSError(ErrorCodes.TOOL_EXECUTION_FAILED, 'failed', details);
         expect(err.details).toEqual(details);
     });

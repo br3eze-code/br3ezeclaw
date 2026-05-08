@@ -3,8 +3,13 @@
 // Mock all native deps that aren't installed in the test runner
 jest.mock('routeros-client', () => ({
     RouterOSClient: class {
-        constructor() { this.connected = false; }
-        connect()    { return Promise.resolve(); }
+        constructor(config) { this.config = config; this.connected = false; }
+        connect()    { 
+            if (this.config && this.config.host === '192.0.2.1') {
+                return new Promise(() => {}); // hang to trigger safety timeout
+            }
+            return Promise.resolve(this); 
+        }
         close()      { return Promise.resolve(); }
         menu()       { return { get: jest.fn().mockResolvedValue([]) }; }
     }
@@ -60,7 +65,7 @@ describe('MikroTikManager — initialization', () => {
             port: 8728
         });
     });
-    afterEach(() => { try { manager.destroy(); } catch (_) {} });
+    afterEach(() => { try { manager.disconnect(); } catch (_) {} });
 
     test('initial state is not connected', () => {
         const state = manager.getState();
@@ -85,7 +90,7 @@ describe('MikroTikManager — getAvailableTools', () => {
     beforeEach(() => {
         manager = new MikroTikManager({ host: '192.168.88.1', user: 'admin', password: '' });
     });
-    afterEach(() => { try { manager.destroy(); } catch (_) {} });
+    afterEach(() => { try { manager.disconnect(); } catch (_) {} });
 
     test('returns an array', () => {
         expect(Array.isArray(manager.getAvailableTools())).toBe(true);
@@ -112,7 +117,7 @@ describe('MikroTikManager — requires connection', () => {
     beforeEach(() => {
         manager = new MikroTikManager({ host: '192.168.88.1', user: 'admin', password: '' });
     });
-    afterEach(() => { try { manager.destroy(); } catch (_) {} });
+    afterEach(() => { try { manager.disconnect(); } catch (_) {} });
 
     test('getSystemStats throws ConnectionError when disconnected', async () => {
         await expect(manager.getSystemStats()).rejects.toThrow(ConnectionError);
@@ -130,7 +135,7 @@ describe('MikroTikManager — event emission', () => {
     beforeEach(() => {
         manager = new MikroTikManager({ host: '10.0.0.1', user: 'admin', password: '' });
     });
-    afterEach(() => { try { manager.destroy(); } catch (_) {} });
+    afterEach(() => { try { manager.disconnect(); } catch (_) {} });
 
     test('emits connected event with host and timestamp', done => {
         manager.once('connected', data => {
@@ -160,5 +165,5 @@ describe('testConnection', () => {
         });
         expect(result.success).toBe(false);
         expect(typeof result.message).toBe('string');
-    }, 10000);
+    }, 15000);
 });
