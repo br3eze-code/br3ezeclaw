@@ -53,6 +53,7 @@ class AgentOS extends EventEmitter {
     this.initialized = false;
     this.shutdownHandlers = [];
     this._alertState = new Map();
+    this._signalHandlers = {}; // track for removal on destroy
   }
 
   // Logging aliases for legacy compatibility
@@ -399,8 +400,11 @@ setupShutdownHandlers() {
     process.exit(0);
   };
 
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  // Store references so we can remove them in destroy()
+  this._signalHandlers.SIGTERM = () => gracefulShutdown('SIGTERM');
+  this._signalHandlers.SIGINT  = () => gracefulShutdown('SIGINT');
+  process.on('SIGTERM', this._signalHandlers.SIGTERM);
+  process.on('SIGINT',  this._signalHandlers.SIGINT);
 
   this.shutdownHandlers.push(async () => {
     this.emit('shutdown');
@@ -429,6 +433,16 @@ getStatus() {
     
     logger.info(`AgentOS ${this.id}: shutting down...`);
 
+    // Remove process signal listeners to prevent open-handle leaks in tests
+    if (this._signalHandlers.SIGTERM) {
+      process.removeListener('SIGTERM', this._signalHandlers.SIGTERM);
+      this._signalHandlers.SIGTERM = null;
+    }
+    if (this._signalHandlers.SIGINT) {
+      process.removeListener('SIGINT', this._signalHandlers.SIGINT);
+      this._signalHandlers.SIGINT = null;
+    }
+
     // Stop background tasks first
     if (this.orchestrator) {
       try {
@@ -441,6 +455,10 @@ getStatus() {
     try {
       if (this.billing && typeof this.billing.stopReaper === 'function') {
         this.billing.stopReaper();
+      }
+      // Stop telemetry timer
+      if (this.telemetry && typeof this.telemetry.stop === 'function') {
+        this.telemetry.stop();
       }
       await this.health.stop();
       await this.channels.closeAll();
@@ -466,5 +484,5 @@ getStatus() {
 }
 
 module.exports = AgentOS;
-// Alias for legacy ss35b compatibility
+
 module.exports.AgentOSBot = AgentOS;
