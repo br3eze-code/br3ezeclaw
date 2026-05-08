@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AgentOS Mission Control</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --border: rgba(255, 255, 255, 0.1);
+            --accent: #3b82f6;
+            --accent-glow: rgba(59, 130, 246, 0.5);
+            --success: #10b981;
+            --fail: #ef4444;
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+        }
+        * { box-sizing: border-box; }
+        body { 
+            margin: 0; 
+            background: var(--bg); 
+            color: var(--text-main); 
+            font-family: 'Outfit', system-ui, sans-serif;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.15) 0px, transparent 50%);
+            min-height: 100vh;
+        }
+        header { 
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(12px);
+            padding: 24px 40px; 
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo { font-size: 24px; font-weight: 700; background: linear-gradient(to right, #3b82f6, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: flex; align-items: center; gap: 12px; }
+        main { padding: 40px; max-width: 1400px; margin: auto; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 32px; }
+        .card { 
+            background: var(--card-bg); 
+            backdrop-filter: blur(8px);
+            padding: 32px; 
+            border-radius: 24px; 
+            border: 1px solid var(--border); 
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+        .card:hover { transform: translateY(-4px); border-color: var(--accent); }
+        .status-ok { color: var(--success); }
+        .status-fail { color: var(--fail); }
+        h3 { margin-top: 0; color: var(--text-dim); font-size: 14px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
+        .big-number { font-size: 64px; font-weight: 700; margin: 16px 0; letter-spacing: -0.02em; }
+        .badge { display: inline-block; padding: 4px 12px; border-radius: 99px; background: rgba(59, 130, 246, 0.2); color: var(--accent); font-size: 12px; font-weight: 600; }
+        .log-container { 
+            background: rgba(0, 0, 0, 0.2); 
+            padding: 20px; 
+            border-radius: 16px; 
+            font-family: 'Fira Code', monospace; 
+            font-size: 13px; 
+            color: #cbd5e1;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+        }
+        .log-entry { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; gap: 12px; }
+        .log-tag { min-width: 60px; font-weight: bold; }
+        .tag-ok { color: var(--success); }
+        .tag-fail { color: var(--fail); }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 var(--accent-glow); } 70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); } 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); } }
+        .active-pulse { width: 12px; height: 12px; background: var(--success); border-radius: 50%; animation: pulse 2s infinite; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">🚀 AgentOS Mission Control</div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="active-pulse"></div>
+            <span style="font-size: 14px; font-weight: 500; color: var(--text-dim);">Fleet Online</span>
+        </div>
+    </header>
+    <main>
+        <div class="grid">
+            <div class="card">
+                <h3>Fleet Integrity</h3>
+                <div class="big-number">0<span style="font-size: 24px; color: var(--text-dim); font-weight: 400;">/1</span></div>
+                <p style="color: var(--text-dim); line-height: 1.6;">Nodes successfully synchronized and autonomous agents provisioned across the edge fleet.</p>
+            </div>
+            <div class="card">
+                <h3>Autonomous Agents</h3>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px;">
+                    
+                    <span class="badge" style="background: rgba(139, 92, 246, 0.2); color: #a78bfa;">fleet-master</span>
+                </div>
+                <p style="color: var(--text-dim); margin-top: 24px; line-height: 1.6;">Each node is managed by a dedicated agent with specific roles and duties.</p>
+            </div>
+        </div>
+        <div class="card" style="margin-top: 32px;">
+            <h3>Deployment Protocol Logs</h3>
+            <div class="log-container">
+                
+                    <div class="log-entry">
+                        <span class="log-tag tag-fail">[FAILURE]</span>
+                        <span style="color: var(--text-main); font-weight: 600;">core</span>
+                        <span style="color: var(--text-dim);">core</span>
+                        <span style="color: var(--fail); margin-left: auto;">manager.state.conn.write is not a function</span>
+                    </div>
+                
+            </div>
+        </div>
+    </main>
+</body>
+</html>
