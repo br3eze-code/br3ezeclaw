@@ -76,28 +76,28 @@ class ChannelManager extends EventEmitter {
     // ── Auto-detect additional channels from root config ────────────────────
     const autoChannels = ['slack', 'discord', 'email', 'sms', 'ussd'];
     for (const type of autoChannels) {
-      if (this.agent.config[type]?.enabled && !channelConfigs.find(c => c.type === type)) {
+      if (this.agent.config[type] && this.agent.config[type].enabled && !channelConfigs.find(c => c.type === type)) {
         channelConfigs.push({
           type,
           config: this.agent.config[type]
         });
       }
 
-      if (this.agent.config.email?.enabled && !channelConfigs.find(c => c.type === 'email')) {
+      if (this.agent.config.email && this.agent.config.email.enabled && !channelConfigs.find(c => c.type === 'email')) {
         channelConfigs.push({
           type: 'email',
           config: this.agent.config.email
         });
       }
 
-      if (this.agent.config.sms?.enabled && !channelConfigs.find(c => c.type === 'sms')) {
+      if (this.agent.config.sms && this.agent.config.sms.enabled && !channelConfigs.find(c => c.type === 'sms')) {
         channelConfigs.push({
           type: 'sms',
           config: this.agent.config.sms
         });
       }
 
-      if (this.agent.config.ussd?.enabled && !channelConfigs.find(c => c.type === 'ussd')) {
+      if (this.agent.config.ussd && this.agent.config.ussd.enabled && !channelConfigs.find(c => c.type === 'ussd')) {
         channelConfigs.push({
           type: 'ussd',
           config: this.agent.config.ussd
@@ -109,8 +109,7 @@ class ChannelManager extends EventEmitter {
         await this.register(chan);
       }
     }
-
-  static adapters = new Map();
+  } // ← closes initialize()
 
   static registerAdapter(type, adapterClass) {
     ChannelManager.adapters.set(type, adapterClass);
@@ -157,9 +156,9 @@ class ChannelManager extends EventEmitter {
       this.emit('channelRegistered', type);
     } catch (error) {
       if (error.code === 'MODULE_NOT_FOUND') {
-        logger.error(`✖ Failed to load ${type} channel: Missing dependency — ${error.message}`);
+        logger.error(`Failed to load ${type} channel: Missing dependency — ${error.message}`);
       } else {
-        logger.error(`✖ Failed to initialize ${type} channel: ${error.message}`);
+        logger.error(`Failed to initialize ${type} channel: ${error.message}`);
       }
       this.emit('channelError', { type, error });
     }
@@ -173,8 +172,8 @@ class ChannelManager extends EventEmitter {
       };
     }
     return {
-      text: result.result?.text || JSON.stringify(result.result),
-      buttons: result.result?.buttons,
+      text: result.result && result.result.text ? result.result.text : JSON.stringify(result.result),
+      buttons: result.result && result.result.buttons,
       metadata: result.metadata
     };
   }
@@ -217,5 +216,8 @@ class ChannelManager extends EventEmitter {
     this.channels.clear();
   }
 }
+
+// Static field assigned after class definition (Babel class-properties plugin not required)
+ChannelManager.adapters = new Map();
 
 module.exports = ChannelManager;
