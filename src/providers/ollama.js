@@ -11,6 +11,25 @@ class OllamaProvider extends BaseProvider {
     this.host = options.host || process.env.OLLAMA_HOST || 'http://localhost:11434';
     this.model = options.model || process.env.OLLAMA_MODEL || 'llama3.1';
   }
+
+  async validateKey() {
+    try {
+      // Check if Ollama server is reachable and model exists
+      const response = await fetch(`${this.host}/api/tags`);
+      if (!response.ok) return { valid: false, error: `Server returned ${response.status}` };
+      
+      const data = await response.json();
+      const modelExists = data.models?.some(m => m.name.includes(this.model));
+      
+      if (!modelExists) {
+        return { valid: false, error: `Model ${this.model} not found on server` };
+      }
+      
+      return { valid: true };
+    } catch (error) {
+      return { valid: false, error: error.message };
+    }
+  }
   
   async execute(conversation, tools) {
     // Format messages for Ollama

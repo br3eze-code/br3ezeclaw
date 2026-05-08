@@ -1,0 +1,103 @@
+name: dahua
+version: 1.1.0
+description: Control Dahua cameras/NVRs including PTZ, snapshots, and event monitoring.
+author: br3eze
+license: Apache-2.0
+
+tools:
+  - name: list
+    description: List all configured Dahua devices.
+    parameters: {}
+    returns: array
+    
+  - name: info
+    description: Get detailed device information (model, serial, version).
+    parameters:
+      - name: device
+        type: string
+        required: false
+        description: ID of the device to query.
+    returns: object
+    
+  - name: snapshot
+    description: Capture a live snapshot from a camera.
+    parameters:
+      - name: device
+        type: string
+        required: false
+        description: ID of the device.
+      - name: channel
+        type: number
+        required: false
+        default: 1
+        description: Camera channel number.
+    returns: object
+    
+  - name: ptz.move
+    description: Move the PTZ camera in a specific direction.
+    parameters:
+      - name: device
+        type: string
+        required: false
+      - name: channel
+        type: number
+        required: false
+        default: 1
+      - name: action
+        type: string
+        required: true
+        enum: [Up, Down, Left, Right, ZoomWide, ZoomTele, Stop]
+      - name: speed
+        type: number
+        required: false
+        default: 4
+      - name: reason
+        type: string
+        required: true
+    returns: object
+    
+  - name: ptz.preset
+    description: Move camera to a predefined preset position.
+    parameters:
+      - name: device
+        type: string
+        required: false
+      - name: channel
+        type: number
+        required: false
+        default: 1
+      - name: preset
+        type: number
+        required: true
+      - name: reason
+        type: string
+        required: true
+    returns: object
+    
+  - name: events.query
+    description: Query recent camera events (motion, IVS).
+    parameters:
+      - name: device
+        type: string
+        required: false
+      - name: minutes
+        type: number
+        required: false
+        default: 60
+    returns: array
+    
+  - name: system.reboot
+    description: Reboot the Dahua device.
+    parameters:
+      - name: device
+        type: string
+        required: false
+      - name: reason
+        type: string
+        required: true
+    returns: object
+
+config:
+  - name: devices
+    type: object
+    description: Map of device IDs to their connection details.

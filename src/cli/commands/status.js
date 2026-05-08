@@ -1,13 +1,15 @@
 // ==========================================
-// AGENTOS STATUS COMMAND - FIXED
-// Quick system overview with proper error handling
+// AGENTOS STATUS COMMAND
+// Quick system overview with clack prompts
 // ==========================================
 
-const _chalk = require('chalk');
-const chalk  = _chalk.default || _chalk;
-const fs = require('fs');
-const _ora = require('ora');
-const ora = _ora.default || _ora;
+'use strict';
+
+const fs   = require('fs');
+const path = require('path');
+const { intro, outro, spinner, note, log } = require('@clack/prompts');
+const { getDatabase } = require('../../core/database');
+const { costTracker } = require('../../core/cost-tracker');
 
 module.exports = (program) => {
   program
@@ -17,89 +19,101 @@ module.exports = (program) => {
     .option('--json', 'Output as JSON')
     .action(async (options) => {
       const { BRAND, CONFIG_PATH, STATE_PATH } = global.AGENTOS;
-      
+
       const statusData = {
-        agentos: {},
-        gateway: {},
-        router: {},
-        timestamp: new Date().toISOString()
+        agentos:      {},
+        gateway:      {},
+        router:       {},
+        capabilities: { skills: 0, domains: 0 },
+        costs:        costTracker.snapshot(),
+        timestamp:    new Date().toISOString(),
       };
 
       try {
-        // Config info
+        // ── Config ──────────────────────────────────────────────
         if (fs.existsSync(CONFIG_PATH)) {
           const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
           statusData.agentos = {
             profile: global.AGENTOS.PROFILE_DIR,
             version: cfg.version,
-            created: new Date(cfg.createdAt).toLocaleDateString()
+            created: new Date(cfg.createdAt).toLocaleDateString(),
           };
         } else {
-          console.log(chalk.yellow('⚠ Not configured - run: agentos onboard'));
+          log.warn('Not configured — run: agentos onboard');
           return;
         }
 
-        // Gateway status
+        // ── Gateway ─────────────────────────────────────────────
         const pidFile = `${STATE_PATH}/gateway.pid`;
         if (fs.existsSync(pidFile)) {
           try {
             const pid = fs.readFileSync(pidFile, 'utf8').trim();
-            process.kill(parseInt(pid), 0); // Check if process exists
-            statusData.gateway = { 
-              status: 'running', 
-              pid: parseInt(pid),
-              color: 'green'
-            };
-          } catch (e) {
-            statusData.gateway = { 
-              status: 'stale', 
-              error: 'PID file exists but process not running',
-              color: 'yellow'
-            };
+            process.kill(parseInt(pid), 0);
+            statusData.gateway = { status: 'running', pid: parseInt(pid) };
+          } catch {
+            statusData.gateway = { status: 'stale', error: 'PID file exists but process not running' };
           }
         } else {
-          statusData.gateway = { 
-            status: 'stopped',
-            color: 'red'
-          };
+          statusData.gateway = { status: 'stopped' };
         }
 
-        // MikroTik status with spinner
-        const spinner = ora('Connecting to router...').start();
+        // ── Channels ─────────────────────────────────────────────
+        statusData.channels = {
+          telegram: !!process.env.TELEGRAM_BOT_TOKEN || !!process.env.TELEGRAM_TOKEN,
+          whatsapp: !!process.env.WHATSAPP_TOKEN,
+          slack:    !!process.env.SLACK_BOT_TOKEN || !!process.env.SLACK_TOKEN,
+          discord:  !!process.env.DISCORD_TOKEN,
+        };
+
+        // ── Capabilities ─────────────────────────────────────────
+        try {
+          const skillsPath = path.join(process.cwd(), 'src', 'skills');
+          if (fs.existsSync(skillsPath))
+            statusData.capabilities.skills = fs.readdirSync(skillsPath, { withFileTypes: true }).filter(d => d.isDirectory()).length;
+
+          const domainsPath = path.join(process.cwd(), 'src', 'domains');
+          if (fs.existsSync(domainsPath))
+            statusData.capabilities.domains = fs.readdirSync(domainsPath, { withFileTypes: true }).filter(d => d.isDirectory()).length;
+        } catch { /* ignore */ }
+
+        // ── MikroTik ─────────────────────────────────────────────
+        const s = spinner();
+        s.start('Connecting to router…');
         let mikrotik;
         try {
           const { getMikroTikClient } = require('../../core/mikrotik');
           mikrotik = await getMikroTikClient();
+          await mikrotik.connect();
           const stats = await mikrotik.getSystemStats();
-          
-          spinner.stop();
-          
-          // Properly access normalized stats
-          const cpuLoad = stats['cpu-load'] || '0';
-          const uptime = stats['uptime'] || 'unknown';
-          const version = stats['version'] || 'unknown';
-          const memoryUsage = stats['memory-usage-percent'] || '0';
-          
+          s.stop('Router telemetry collected');
           statusData.router = {
-            status: 'connected',
-            cpu: `${cpuLoad}%`,
-            memory: `${memoryUsage}%`,
-            uptime: uptime,
-            version: version,
-            color: 'green'
+            status:  'connected',
+            cpu:     `${stats['cpu-load'] || 0}%`,
+            memory:  `${stats['memory-usage-percent'] || 0}%`,
+            uptime:  stats['uptime'] || 'unknown',
+            version: stats['version'] || 'unknown',
           };
         } catch (e) {
-          spinner.stop();
-          statusData.router = { 
-            status: 'disconnected', 
-            error: e.message,
-            color: 'red'
-          };
+          s.stop(`Router unreachable: ${e.message}`);
+          statusData.router = { status: 'disconnected', error: e.message };
         } finally {
-          if (mikrotik) await mikrotik.disconnect();
+          if (mikrotik) {
+            try {
+              const p = mikrotik.disconnect();
+              if (p && p.catch) p.catch(() => {});
+            } catch (e) {}
+          }
         }
 
-        // Output
+        // ── Vouchers ─────────────────────────────────────────────
+        try {
+          const db = await getDatabase();
+          statusData.vouchers = await db.getStats();
+        } catch (e) {
+          statusData.vouchers = { error: e.message };
+        }
+
+        // ── Output ───────────────────────────────────────────────
         if (options.json) {
           console.log(JSON.stringify(statusData, null, 2));
         } else {
@@ -107,42 +121,83 @@ module.exports = (program) => {
         }
 
       } catch (error) {
-        console.error(chalk.red('Error:'), error.message);
+        log.error(`Status failed: ${error.message}`);
         process.exit(1);
       }
     });
 };
 
+// ── Renderer ─────────────────────────────────────────────────────────────────
+
 function renderStatus(data, brand) {
-  console.log(chalk.cyan(`\n${brand.emoji} ${brand.name} Status\n`));
-  
-  // AgentOS section
-  if (data.agentos.version) {
-    console.log(chalk.gray('Profile:'), data.agentos.profile);
-    console.log(chalk.gray('Version:'), data.agentos.version);
-    console.log(chalk.gray('Created:'), data.agentos.created);
+  intro(`${brand.emoji}  ${brand.name} Status`);
+
+  // ── System Identity ──────────────────────────────────────────
+  const identityLines = [
+    `Profile :  ${data.agentos.profile || '(unknown)'}`,
+    `Version :  ${data.agentos.version || '(unknown)'}`,
+    `Created :  ${data.agentos.created || '—'}`,
+    `Skills  :  ${data.capabilities.skills} loaded`,
+    `Domains :  ${data.capabilities.domains} identified`,
+  ];
+  note(identityLines.join('\n'), '📦 System Identity');
+
+  // ── Gateway & Router ─────────────────────────────────────────
+  const gwStatus = data.gateway.status === 'running'
+    ? `running (PID: ${data.gateway.pid})`
+    : data.gateway.status;
+
+  const routerLine = data.router.status === 'connected'
+    ? `connected  CPU: ${data.router.cpu}  Memory: ${data.router.memory}`
+    : `disconnected${data.router.error ? '  — ' + data.router.error : ''}`;
+
+  const channels = [];
+  if (data.channels?.telegram) channels.push('Telegram');
+  if (data.channels?.whatsapp) channels.push('WhatsApp');
+  if (data.channels?.slack) channels.push('Slack');
+  if (data.channels?.discord) channels.push('Discord');
+  const channelStr = channels.length ? channels.join(', ') : 'None configured';
+
+  const infraLines = [
+    `Gateway  :  ${gwStatus}`,
+    `Router   :  ${routerLine}`,
+    `Channels :  ${channelStr}`,
+    ...(data.router.status === 'connected' ? [
+      `Uptime   :  ${data.router.uptime}`,
+      `RouterOS :  ${data.router.version}`,
+    ] : []),
+  ];
+  note(infraLines.join('\n'), '🌐 Infrastructure');
+
+  // ── Billing & AI ─────────────────────────────────────────────
+  const billingLines = [];
+  if (data.vouchers && !data.vouchers.error) {
+    billingLines.push(
+      `Vouchers:  ${data.vouchers.active} active / ${data.vouchers.total} total` +
+      `  (${data.vouchers.used || 0} used, ${data.vouchers.expired || 0} expired)`
+    );
   }
-  
-  // Gateway section
-  const gatewayColor = data.gateway.color === 'green' ? chalk.green : 
-                       data.gateway.color === 'yellow' ? chalk.yellow : chalk.red;
-  console.log(chalk.gray('Gateway:'), gatewayColor(
-    data.gateway.status === 'running' ? `running (PID: ${data.gateway.pid})` : data.gateway.status
-  ));
-  
-  // Router section
-  if (data.router.status === 'connected') {
-    console.log(chalk.gray('Router:'), chalk.green(
-      `connected (CPU: ${data.router.cpu}, Memory: ${data.router.memory})`
-    ));
-    console.log(chalk.gray('Uptime:'), data.router.uptime);
-    console.log(chalk.gray('RouterOS:'), data.router.version);
-  } else {
-    console.log(chalk.gray('Router:'), chalk.red('disconnected'));
-    if (data.router.error) {
-      console.log(chalk.gray('Error:'), chalk.red(data.router.error));
+  if (data.costs) {
+    const inT = data.costs.totalInputTokens || 0;
+    const outT = data.costs.totalOutputTokens || 0;
+    const total = inT + outT;
+    billingLines.push(`AI Cost :  $${data.costs.estimatedUSD}  (${total} tokens)`);
+    
+    if (total > 0) {
+      const width = 30;
+      const inWidth = Math.round((inT / total) * width);
+      const outWidth = width - inWidth;
+      const bar = '█'.repeat(inWidth) + '▒'.repeat(outWidth);
+      const inPct = ((inT / total) * 100).toFixed(1);
+      const outPct = ((outT / total) * 100).toFixed(1);
+      billingLines.push(`Usage   :  ${bar}`);
+      billingLines.push(`           Input: ${inPct}%   Output: ${outPct}%`);
+    } else {
+      billingLines.push(`Usage   :  ` + '░'.repeat(30));
+      billingLines.push(`           Input: 0%   Output: 0%`);
     }
   }
-  
-  console.log('');
+  if (billingLines.length) note(billingLines.join('\n'), '💰 Billing & AI');
+
+  outro(`Type 'agentos --help' for available commands`);
 }

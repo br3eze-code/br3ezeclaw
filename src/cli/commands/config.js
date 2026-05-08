@@ -6,8 +6,7 @@
 const _chalk = require('chalk');
 const chalk  = _chalk.default || _chalk;
 const fs = require('fs');
-const _inquirer = require('inquirer');
-const inquirer  = _inquirer.default || _inquirer;
+const { intro, outro, note, log } = require('@clack/prompts');
 
 module.exports = (program) => {
     const config = program
@@ -22,17 +21,17 @@ module.exports = (program) => {
             const { CONFIG_PATH } = global.AGENTOS;
 
             if (!fs.existsSync(CONFIG_PATH)) {
-                console.log(chalk.red('✗ No configuration found'));
-                return;
+                log.error('No configuration found');
+                process.exit(1);
             }
 
             const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
             const value = path.split('.').reduce((obj, key) => obj?.[key], cfg);
 
             if (value !== undefined) {
-                console.log(typeof value === 'object' ? JSON.stringify(value, null, 2) : value);
+                log.info(typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value));
             } else {
-                console.log(chalk.gray('undefined'));
+                log.warn('undefined');
             }
         });
 
@@ -44,8 +43,8 @@ module.exports = (program) => {
             const { CONFIG_PATH } = global.AGENTOS;
 
             if (!fs.existsSync(CONFIG_PATH)) {
-                console.log(chalk.red('✗ No configuration found'));
-                return;
+                log.error('No configuration found');
+                process.exit(1);
             }
 
             const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
@@ -66,7 +65,7 @@ module.exports = (program) => {
 
             target[last] = parsed;
             fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2));
-            console.log(chalk.green(`✓ Set ${path} = ${parsed}`));
+            log.success(`Set ${path} = ${parsed}`);
         });
 
     // Subcommand: config edit
@@ -89,9 +88,11 @@ module.exports = (program) => {
         .action((options) => {
             const { CONFIG_PATH } = global.AGENTOS;
 
+            intro('📄 Configuration');
+
             if (!fs.existsSync(CONFIG_PATH)) {
-                console.log(chalk.red('✗ No configuration found'));
-                return;
+                log.error('No configuration found');
+                process.exit(1);
             }
 
             let cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
@@ -99,13 +100,14 @@ module.exports = (program) => {
             if (!options.sensitive) {
                 // Mask sensitive fields
                 cfg = JSON.parse(JSON.stringify(cfg)); // Deep copy
+                if (cfg.adapters?.mikrotik?.password) cfg.adapters.mikrotik.password = '********';
                 if (cfg.mikrotik?.pass) cfg.mikrotik.pass = '********';
                 if (cfg.telegram?.token) cfg.telegram.token = cfg.telegram.token.substring(0, 10) + '...';
                 if (cfg.gateway?.token) cfg.gateway.token = cfg.gateway.token.substring(0, 16) + '...';
             }
 
-            console.log(chalk.cyan('\n📄 Configuration:\n'));
-            console.log(JSON.stringify(cfg, null, 2));
-            console.log('');
+            note(JSON.stringify(cfg, null, 2), 'Current State');
+            outro(chalk.green('✓ Done.'));
         });
 };
+

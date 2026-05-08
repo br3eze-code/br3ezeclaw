@@ -1,0 +1,8 @@
+{
+  "name": "macos",
+  "version": "1.0.0",
+  "description": "Macos skill for AgentOS",
+  "entry": "index.js",
+  "author": "AgentOS",
+  "license": "Apache-2.0"
+}

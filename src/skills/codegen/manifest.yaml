@@ -1,0 +1,12 @@
+name: codegen
+version: 1.0.0
+description: AI-powered MikroTik configuration generator
+author: br3eze
+tools:
+  - name: codegen.generate
+    description: Generate RouterOS .rsc code from natural language
+    parameters:
+      - name: prompt
+        type: string
+        required: true
+    returns: object

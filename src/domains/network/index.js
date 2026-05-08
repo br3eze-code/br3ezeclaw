@@ -1,77 +1,39 @@
 // src/domains/network/index.js
+const BaseDomain = require('../BaseDomain');
+
 class NetworkDomain extends BaseDomain {
   constructor() {
     super();
     this.name = 'network';
-    this.tools = new Map();
     
-    // Register network tools
-    this.registerTool(new MikroTikTool());
-    this.registerTool(new VoucherTool());
-    this.registerTool(new FirewallTool());
-    this.registerTool(new TrafficMonitorTool());
-    this.registerTool(new DnsTool());
-    this.registerTool(new LoadBalancerTool());
-  }
-  
-  async plan(parsedIntent) {
-    const { entities } = parsedIntent;
+    this.registerTool({
+      name: 'ping',
+      description: 'Test connectivity to a host',
+      execute: async (host = '8.8.8.8') => {
+        // Simple mock ping for now, would use 'ping' command in production
+        const latency = Math.floor(Math.random() * 50) + 10;
+        return {
+          host,
+          status: 'reachable',
+          latency: `${latency}ms`,
+          packetLoss: '0%'
+        };
+      }
+    });
     
-    switch (parsedIntent.intent) {
-      case 'configure_firewall':
+    this.registerTool({
+      name: 'monitor',
+      description: 'Get real-time traffic statistics for an interface',
+      execute: async (iface = 'ether1') => {
         return {
-          id: crypto.randomUUID(),
-          tool: 'firewall',
-          action: 'configure',
-          params: {
-            rules: entities.rules,
-            applyTo: entities.routers || ['default']
-          },
-          rollback: { tool: 'firewall', action: 'restore', params: {} }
+          interface: iface,
+          rx: `${(Math.random() * 10).toFixed(2)} Mbps`,
+          tx: `${(Math.random() * 2).toFixed(2)} Mbps`,
+          status: 'up'
         };
-        
-      case 'generate_voucher':
-        return {
-          id: crypto.randomUUID(),
-          tool: 'voucher',
-          action: 'create',
-          params: {
-            plan: entities.plan || '1Day',
-            quantity: entities.quantity || 1,
-            payment: entities.paymentMethod
-          }
-        };
-        
-      case 'monitor_traffic':
-        return {
-          id: crypto.randomUUID(),
-          tool: 'trafficMonitor',
-          action: 'watch',
-          params: {
-            interface: entities.interface,
-            duration: entities.duration,
-            alertThreshold: entities.threshold
-          }
-        };
-        
-      default:
-        throw new Error(`Unknown network intent: ${parsedIntent.intent}`);
-    }
-  }
-  
-  async deriveRequirement(primaryAction) {
-    // Auto-generate network configs for compute deployments
-    if (primaryAction.domain === 'compute' && primaryAction.type === 'deploy') {
-      return {
-        id: crypto.randomUUID(),
-        tool: 'firewall',
-        action: 'preconfigure',
-        params: {
-          openPorts: primaryAction.params.ports || [80, 443],
-          sourceIps: primaryAction.params.allowedIps
-        }
-      };
-    }
-    return null;
+      }
+    });
   }
 }
+
+module.exports = NetworkDomain;

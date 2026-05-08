@@ -13,15 +13,24 @@ class DahuaSkill extends BaseSkill {
 
   static getTools() {
     return {
+      'dahua.device.list': {
+        risk: 'low',
+        description: 'List all available Dahua devices in the workspace',
+        parameters: {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      },
       'dahua.device.info': {
         risk: 'low',
         description: 'Get device info: model, firmware, serial',
         parameters: {
           type: 'object',
           properties: {
-            device: { type: 'string', description: 'deviceId from workspace' }
+            device: { type: 'string', description: 'deviceId from workspace (optional, defaults to first)' }
           },
-          required: ['device']
+          required: []
         }
       },
       'dahua.snapshot.get': {
@@ -30,10 +39,10 @@ class DahuaSkill extends BaseSkill {
         parameters: {
           type: 'object',
           properties: {
-            device: { type: 'string' },
+            device: { type: 'string', description: 'Optional device ID' },
             channel: { type: 'number', default: 1, description: 'channel for NVRs' }
           },
-          required: ['device']
+          required: []
         }
       },
       'dahua.ptz.move': {
@@ -42,13 +51,13 @@ class DahuaSkill extends BaseSkill {
         parameters: {
           type: 'object',
           properties: {
-            device: { type: 'string' },
+            device: { type: 'string', description: 'Optional device ID' },
             channel: { type: 'number', default: 1 },
             action: { type: 'string', enum: ['Up', 'Down', 'Left', 'Right', 'LeftUp', 'LeftDown', 'RightUp', 'RightDown', 'ZoomWide', 'ZoomTele', 'Stop'] },
             speed: { type: 'number', minimum: 1, maximum: 8, default: 4 },
             reason: { type: 'string', maxLength: 200 }
           },
-          required: ['device', 'action', 'reason']
+          required: ['action', 'reason']
         }
       },
       'dahua.ptz.preset': {
@@ -57,12 +66,12 @@ class DahuaSkill extends BaseSkill {
         parameters: {
           type: 'object',
           properties: {
-            device: { type: 'string' },
+            device: { type: 'string', description: 'Optional device ID' },
             channel: { type: 'number', default: 1 },
             preset: { type: 'number', minimum: 1, maximum: 255 },
             reason: { type: 'string' }
           },
-          required: ['device', 'preset', 'reason']
+          required: ['preset', 'reason']
         }
       },
       'dahua.events.subscribe': {
@@ -71,11 +80,11 @@ class DahuaSkill extends BaseSkill {
         parameters: {
           type: 'object',
           properties: {
-            device: { type: 'string' },
+            device: { type: 'string', description: 'Optional device ID' },
             codes: { type: 'array', items: { type: 'string' }, default: ['VideoMotion', 'CrossLineDetection'] },
             minutes: { type: 'number', default: 60, maximum: 1440 }
           },
-          required: ['device']
+          required: []
         }
       },
       'dahua.system.reboot': {
@@ -84,30 +93,38 @@ class DahuaSkill extends BaseSkill {
         parameters: {
           type: 'object',
           properties: {
-            device: { type: 'string' },
+            device: { type: 'string', description: 'Optional device ID' },
             reason: { type: 'string', maxLength: 200 }
           },
-          required: ['device', 'reason']
+          required: ['reason']
         }
       }
     }
   }
 
   _client(deviceId) {
-    if (this.clients.has(deviceId)) return this.clients.get(deviceId)
+    const targetDevice = deviceId || Object.keys(this.workspace.dahua_devices || {})[0]
+    if (!targetDevice) {
+      throw new Error('No Dahua devices configured in workspace')
+    }
 
-    const dev = this.workspace.dahua_devices[deviceId]
-    if (!dev || dev.driver!== 'dahua') throw new Error(`Dahua device ${deviceId} not found`)
+    if (this.clients.has(targetDevice)) return this.clients.get(targetDevice)
+
+    const dev = this.workspace.dahua_devices && this.workspace.dahua_devices[targetDevice]
+    const supported = ['dahua', 'amcrest', 'lorex', 'qsee', 'icrealtime']
+    if (!dev || !supported.includes((dev.driver || '').toLowerCase())) {
+        throw new Error(`Dahua/OEM device ${targetDevice} not found or unsupported driver`)
+    }
 
     const client = new DigestFetch(dev.user, dev.password)
-    this.clients.set(deviceId, { client, base: `http://${dev.host}:${dev.port || 80}/cgi-bin` })
-    return this.clients.get(deviceId)
+    this.clients.set(targetDevice, { client, base: `http://${dev.host}:${dev.port || 80}/cgi-bin`, deviceId: targetDevice })
+    return this.clients.get(targetDevice)
   }
 
   async _get(deviceId, path) {
-    const { client, base } = this._client(deviceId)
+    const { client, base, deviceId: resolvedId } = this._client(deviceId)
     const res = await client.fetch(`${base}/${path}`)
-    if (!res.ok) throw new Error(`Dahua API ${res.status}: ${await res.text()}`)
+    if (!res.ok) throw new Error(`Dahua API ${res.status} on device ${resolvedId}: ${await res.text()}`)
     return res
   }
 
@@ -121,13 +138,20 @@ class DahuaSkill extends BaseSkill {
   async execute(toolName, args, ctx) {
     try {
       switch (toolName) {
+        case 'dahua.device.list':
+          return Object.keys(this.workspace.dahua_devices || {}).map(id => {
+            const dev = this.workspace.dahua_devices[id];
+            return { id, host: dev.host, driver: dev.driver, name: dev.name || id };
+          });
+
         case 'dahua.device.info':
-          const info = await this._get(args.device, 'magicBox.cgi?action=getDeviceType')
-          const name = await this._get(args.device, 'magicBox.cgi?action=getMachineName')
-          const serial = await this._get(args.device, 'magicBox.cgi?action=getSerialNo')
-          const version = await this._get(args.device, 'magicBox.cgi?action=getSoftwareVersion')
+          const targetInfoDevice = args.device || Object.keys(this.workspace.dahua_devices || {})[0];
+          const info = await this._get(targetInfoDevice, 'magicBox.cgi?action=getDeviceType')
+          const name = await this._get(targetInfoDevice, 'magicBox.cgi?action=getMachineName')
+          const serial = await this._get(targetInfoDevice, 'magicBox.cgi?action=getSerialNo')
+          const version = await this._get(targetInfoDevice, 'magicBox.cgi?action=getSoftwareVersion')
           return {
-            device: args.device,
+            device: targetInfoDevice,
             type: (await info.text()).split('=')[1]?.trim(),
             name: (await name.text()).split('=')[1]?.trim(),
             serial: (await serial.text()).split('=')[1]?.trim(),
@@ -147,19 +171,21 @@ class DahuaSkill extends BaseSkill {
           }
 
         case 'dahua.ptz.move':
-          this.logger.warn(`DAHUA PTZ ${args.action} on ${args.device}`, { user: ctx.userId, reason: args.reason })
+          const targetMoveDevice = args.device || Object.keys(this.workspace.dahua_devices || {})[0];
+          this.logger.warn(`DAHUA PTZ ${args.action} on ${targetMoveDevice}`, { user: ctx.userId, reason: args.reason })
           const ch1 = args.channel || 1
           const cmd = `ptz.cgi?action=start&channel=${ch1}&code=${args.action}&arg1=0&arg2=${args.speed || 4}&arg3=0`
-          await this._get(args.device, cmd)
+          await this._get(targetMoveDevice, cmd)
           // Auto-stop after 1s for safety
-          setTimeout(() => this._get(args.device, `ptz.cgi?action=stop&channel=${ch1}&code=${args.action}`), 1000)
-          return { device: args.device, channel: ch1, action: args.action, status: 'moving' }
+          setTimeout(() => this._get(targetMoveDevice, `ptz.cgi?action=stop&channel=${ch1}&code=${args.action}`), 1000)
+          return { device: targetMoveDevice, channel: ch1, action: args.action, status: 'moving' }
 
         case 'dahua.ptz.preset':
-          this.logger.warn(`DAHUA PRESET ${args.preset} on ${args.device}`, { user: ctx.userId, reason: args.reason })
+          const targetPresetDevice = args.device || Object.keys(this.workspace.dahua_devices || {})[0];
+          this.logger.warn(`DAHUA PRESET ${args.preset} on ${targetPresetDevice}`, { user: ctx.userId, reason: args.reason })
           const ch2 = args.channel || 1
-          await this._get(args.device, `ptz.cgi?action=start&channel=${ch2}&code=GotoPreset&arg1=0&arg2=${args.preset}&arg3=0`)
-          return { device: args.device, channel: ch2, preset: args.preset }
+          await this._get(targetPresetDevice, `ptz.cgi?action=start&channel=${ch2}&code=GotoPreset&arg1=0&arg2=${args.preset}&arg3=0`)
+          return { device: targetPresetDevice, channel: ch2, preset: args.preset }
 
         case 'dahua.events.subscribe':
           // Get event log via log.cgi
@@ -181,9 +207,10 @@ class DahuaSkill extends BaseSkill {
           return items.filter(Boolean).slice(-50) // last 50
 
         case 'dahua.system.reboot':
-          this.logger.warn(`DAHUA REBOOT ${args.device}`, { user: ctx.userId, reason: args.reason })
-          await this._get(args.device, 'magicBox.cgi?action=reboot')
-          return { device: args.device, status: 'rebooting' }
+          const targetRebootDevice = args.device || Object.keys(this.workspace.dahua_devices || {})[0];
+          this.logger.warn(`DAHUA REBOOT ${targetRebootDevice}`, { user: ctx.userId, reason: args.reason })
+          await this._get(targetRebootDevice, 'magicBox.cgi?action=reboot')
+          return { device: targetRebootDevice, status: 'rebooting' }
 
         default:
           throw new Error(`Unknown tool ${toolName}`)

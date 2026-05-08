@@ -209,6 +209,11 @@ class AgentRuntime extends EventEmitter {
             .filter(t => t.name.includes(needle) || t.keywords.some(k => k.includes(needle)))
             .map(t => t.name);
     }
+    async destroy() {
+        this.removeAllListeners();
+        _runtime = null;
+        logger.info('AgentRuntime destroyed');
+    }
 }
 
 // ── Singleton ─────────────────────────────────────────────────────────────────
@@ -219,4 +224,11 @@ function getAgentRuntime(config = {}) {
     return _runtime;
 }
 
-module.exports = { AgentRuntime, RuntimeSession, getAgentRuntime, TOOL_MANIFEST };
+function resetAgentRuntime() {
+    if (_runtime) {
+        _runtime.destroy();
+        _runtime = null;
+    }
+}
+
+module.exports = { AgentRuntime, RuntimeSession, getAgentRuntime, resetAgentRuntime, TOOL_MANIFEST };

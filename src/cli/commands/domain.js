@@ -5,6 +5,7 @@
 
 const _chalk = require('chalk');
 const chalk  = _chalk.default || _chalk;
+const { intro, outro, note, log } = require('@clack/prompts');
 
 module.exports = (program) => {
   program
@@ -21,19 +22,21 @@ module.exports = (program) => {
         hybrid: { name: 'Hybrid Infrastructure', icon: '🔀', adapters: ['all'] }
       };
 
+      intro('🏗️ Domain Manager');
+
       switch (action) {
         case 'list':
-          console.log(chalk.cyan('\n🏗️  Available Domains:\n'));
-          Object.entries(domains).forEach(([key, info]) => {
-            console.log(`${info.icon} ${chalk.bold(info.name)} (${key})`);
-            console.log(`   Adapters: ${info.adapters.join(', ')}\n`);
+          const lines = Object.entries(domains).map(([key, info]) => {
+            return `${info.icon} ${chalk.bold(info.name)} (${key})\n   Adapters: ${info.adapters.join(', ')}`;
           });
+          note(lines.join('\n\n'), 'Available Domains');
+          outro(chalk.green('✓ Listing complete.'));
           break;
 
         case 'set':
           if (!options.type || !domains[options.type]) {
-            console.log(chalk.red('❌ Invalid domain type. Use: network, cloud, container, iot, hybrid'));
-            return;
+            log.error('Invalid domain type. Use: network, cloud, container, iot, hybrid');
+            process.exit(1);
           }
           
           // Update workspace domain
@@ -41,15 +44,22 @@ module.exports = (program) => {
           if (workspace) {
             workspace.domain = options.type;
             workspace.aiCoordinator.setDomain(options.type);
-            console.log(chalk.green(`✅ Domain set to ${options.type}`));
+            log.success(`Domain set to ${options.type}`);
           }
+          outro(chalk.green('✓ Domain configuration updated.'));
           break;
 
         case 'detect':
           // Auto-detect based on connected adapters
-          console.log(chalk.cyan('\n🔍 Detecting infrastructure...'));
+          log.info('Detecting infrastructure...');
           // Implementation would scan for available APIs
+          outro(chalk.green('✓ Detection complete.'));
           break;
+          
+        default:
+          log.error(`Unknown action: ${action}`);
+          process.exit(1);
       }
     });
 };
+

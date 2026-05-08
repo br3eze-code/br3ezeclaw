@@ -80,7 +80,7 @@ class UnrealSkill extends BaseSkill {
     },
     required: ['project', 'nsp_path', 'reason']
   }
-}
+},
 'ue.multiplayer.deploy': {
   risk: 'high',
   description: 'Deploy dedicated server to Agones/K8s for playtest. Requires approval.',
@@ -139,7 +139,7 @@ class UnrealSkill extends BaseSkill {
     },
     required: ['project', 'reason']
   }
-}
+},
 'ue.insights.query': {
   risk: 'low',
   description: 'Query Unreal Insights trace: CPU, GPU, memory, bookmarks',
@@ -167,8 +167,8 @@ class UnrealSkill extends BaseSkill {
     },
     required: ['project', 'module', 'reason']
   }
-}
-  
+},
+
 'ue.p4.sync': {
   risk: 'low',
   description: 'Perforce sync workspace to CL or #head',
@@ -224,7 +224,7 @@ class UnrealSkill extends BaseSkill {
     },
     required: ['job_id']
   }
-}
+},
       'ue.project.info': {
         risk: 'low',
         description: 'Get .uproject info: engine version, plugins, targets',
@@ -359,7 +359,7 @@ class UnrealSkill extends BaseSkill {
   async execute(toolName, args, ctx) {
     try {
       switch (toolName) {
-          case 'ue.android.test':
+          case 'ue.android.test': {
   this.logger.warn(`UE ANDROID TEST ${args.device_id}`, { user: ctx.userId, test: args.test, reason: args.reason })
   const proj17 = this._safeUproject(args.project)
 
@@ -390,8 +390,9 @@ class UnrealSkill extends BaseSkill {
   }
 
   return { project: args.project, device: args.device_id, test: args.test, passed, log: andOut.slice(-4000) }
+}
 
-case 'ue.android.playstore':
+case 'ue.android.playstore': {
   this.logger.warn(`UE PLAYSTORE UPLOAD ${args.aab_path}`, { user: ctx.userId, track: args.track, reason: args.reason })
   const aab = path.resolve(this.projectRoot, args.aab_path)
   await fs.access(aab)
@@ -426,8 +427,9 @@ print(f"Uploaded versionCode {bundle['versionCode']} to ${args.track}")
 `
   const { stdout } = await execAsync(`python3 -c "${py.replace(/"/g, '\\"')}"`, { timeout: 600000 })
   return { project: args.project, aab: args.aab_path, track: args.track, uploaded: true, log: stdout }
+}
 
-case 'ue.switch.deploy':
+case 'ue.switch.deploy': {
   this.logger.warn(`UE SWITCH DEPLOY ${args.devkit_ip}`, { user: ctx.userId, nsp: args.nsp_path, reason: args.reason })
   const nsp = path.resolve(this.projectRoot, args.nsp_path)
   await fs.access(nsp)
@@ -445,6 +447,7 @@ case 'ue.switch.deploy':
   await execAsync(launch)
 
   return { project: args.project, nsp: args.nsp_path, devkit: args.devkit_ip, title_id: args.title_id, deployed: true, log: stdout.slice(-2000) }
+}
 
 case 'ue.switch.lotcheck':
   this.logger.warn(`UE SWITCH LOTCHECK ${args.nsp_path}`, { user: ctx.userId, reason: args.reason })
@@ -547,7 +550,7 @@ case 'ue.multiplayer.stop':
   }, ctx.userId)
   return { project: args.project, stopped: args.fleet, result }
 
-case 'ue.loc.gather':
+case 'ue.loc.gather': {
   this.logger.info(`UE LOC GATHER ${args.project} ${args.config}`, { user: ctx.userId })
   const proj13 = this._safeUproject(args.project)
   const gatherArgs = [
@@ -560,6 +563,7 @@ case 'ue.loc.gather':
   const words = stdout.match(/Gathered (\d+) words/)?.[1] || '0'
   const files = stdout.match(/Updated (\d+) files/)?.[1] || '0'
   return { project: args.project, config: args.config, words_gathered: parseInt(words), files_updated: parseInt(files), preview: args.preview, log: stdout.slice(-2000) }
+}
 
 case 'ue.loc.sync':
   this.logger.warn(`UE LOC SYNC ${args.service} ${args.project}`, { user: ctx.userId, reason: args.reason })
@@ -613,7 +617,7 @@ case 'ue.loc.sync':
     // Similar logic with POEditor API
     throw new Error('POEditor sync not implemented yet - use onesky')
   }
-          case 'ue.insights.query':
+          case 'ue.insights.query': {
   this.logger.info(`UE INSIGHTS QUERY ${args.trace} ${args.query}`, { user: ctx.userId })
   const tracePath = path.resolve(this.projectRoot, args.trace)
   await fs.access(tracePath) // validate exists
@@ -661,8 +665,9 @@ case 'ue.loc.sync':
   }
   
   return { trace: args.trace, query: args.query, filter: args.filter, data: result }
+}
 
-case 'ue.uht.run':
+case 'ue.uht.run': {
   this.logger.warn(`UE UHT ${args.module}`, { user: ctx.userId, reason: args.reason })
   const proj9 = this._safeUproject(args.project)
   
@@ -700,7 +705,8 @@ case 'ue.uht.run':
     log: stdout.slice(-6000),
     stderr: stderr.slice(-2000)
   }
-          case 'ue.p4.sync':
+}
+          case 'ue.p4.sync': {
   this.logger.info(`UE P4 SYNC ${args.project} ${args.changelist}`, { user: ctx.userId })
   const proj7 = this._safeUproject(args.project)
   const p4Args = [
@@ -711,6 +717,7 @@ case 'ue.uht.run':
   ].filter(Boolean)
   const { stdout } = await this._runUAT(p4Args, 600)
   return { project: args.project, changelist: args.changelist, log: stdout.slice(-4000) }
+}
 
 case 'ue.p4.submit':
   this.logger.warn(`UE P4 SUBMIT ${args.project}`, { user: ctx.userId, files: args.files.length, reason: args.reason })
@@ -800,13 +807,14 @@ case 'ue.horde.status':
             targets: data.TargetPlatforms
           }
 
-        case 'ue.python.exec':
+        case 'ue.python.exec': {
           this.logger.warn(`UE PYTHON EXEC ${args.project}`, { user: ctx.userId, reason: args.reason })
           const proj1 = this._safeUproject(args.project)
           const result = await this._remotePython(proj1, args.script, args.timeout)
           return { project: args.project, result }
+        }
 
-        case 'ue.lighting.build':
+        case 'ue.lighting.build': {
           this.logger.warn(`UE LIGHTING BUILD ${args.project}`, { user: ctx.userId, maps: args.maps, quality: args.quality, reason: args.reason })
           const proj2 = this._safeUproject(args.project)
           const mapArgs = args.maps.map(m => `-Map=${m}`).join(' ')
@@ -819,8 +827,9 @@ case 'ue.horde.status':
           ]
           const { stdout } = await this._runUAT(uatArgs, 3600)
           return { project: args.project, maps: args.maps, quality: args.quality, log: stdout.slice(-4000) }
+        }
 
-        case 'ue.cook.run':
+        case 'ue.cook.run': {
           this.logger.warn(`UE COOK ${args.project} ${args.platform}`, { user: ctx.userId, reason: args.reason })
           const proj3 = this._safeUproject(args.project)
           const mapList = args.maps?.length ? args.maps.map(m => `-Map=${m}`).join(' ') : ''
@@ -835,8 +844,9 @@ case 'ue.horde.status':
           ].filter(Boolean)
           const { stdout: cookOut } = await this._runUAT(cookArgs, 3600)
           return { project: args.project, platform: args.platform, log: cookOut.slice(-4000) }
+        }
 
-        case 'ue.test.automation':
+        case 'ue.test.automation': {
           this.logger.warn(`UE TESTS ${args.project}`, { user: ctx.userId, filter: args.tests, reason: args.reason })
           const proj4 = this._safeUproject(args.project)
           const testArgs = [
@@ -849,8 +859,9 @@ case 'ue.horde.status':
           const { stdout: testOut, stderr: testErr } = await this._runUAT(testArgs, 600)
           const passed =!testErr.includes('Error') && testOut.includes('tests succeeded')
           return { project: args.project, passed, log: testOut.slice(-4000) }
+        }
 
-        case 'ue.render.movie':
+        case 'ue.render.movie': {
           this.logger.warn(`UE MRQ RENDER ${args.project}`, { user: ctx.userId, seq: args.level_sequence, reason: args.reason })
           const proj5 = this._safeUproject(args.project)
           const renderScript = `
@@ -881,8 +892,9 @@ subsystem.render_queue(queue)
             this.logger.info(`Render complete, uploading to ${args.s3_output}`)
           }
           return { project: args.project, sequence: args.level_sequence, s3_output: args.s3_output, log: renOut.slice(-4000) }
+        }
 
-        case 'ue.asset.import':
+        case 'ue.asset.import': {
           this.logger.warn(`UE IMPORT ${args.source} -> ${args.destination}`, { user: ctx.userId, reason: args.reason })
           const proj6 = this._safeUproject(args.project)
           let src = args.source
@@ -903,6 +915,7 @@ unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
 `
           await this._remotePython(proj6, importScript, 300)
           return { project: args.project, source: args.source, destination: args.destination, imported: true }
+        }
 
         default:
           throw new Error(`Unknown tool ${toolName}`)

@@ -96,8 +96,11 @@ class HikvisionSkill extends BaseSkill {
 
   _client(deviceId) {
     if (this.clients.has(deviceId)) return this.clients.get(deviceId)
-    const dev = this.workspace.hikvision_devices[deviceId]
-    if (!dev || dev.driver!== 'hikvision') throw new Error(`Hikvision device ${deviceId} not found`)
+    const dev = this.workspace.hikvision_devices && this.workspace.hikvision_devices[deviceId]
+    const supported = ['hikvision', 'annke', 'lts', 'trendnet', 'laview', 'ezviz']
+    if (!dev || !supported.includes((dev.driver || '').toLowerCase())) {
+        throw new Error(`Hikvision/OEM device ${deviceId} not found or unsupported driver`)
+    }
     const client = new DigestFetch(dev.user, dev.password)
     const base = `http://${dev.host}:${dev.port || 80}/ISAPI`
     this.clients.set(deviceId, { client, base })

@@ -18,34 +18,68 @@ class ClaudeProvider extends BaseProvider {
     
     this.client = new Anthropic({ apiKey: this.apiKey });
   }
+
+  async validateKey() {
+    try {
+      // Minimal call to check if key is valid
+      await this.client.messages.create({
+        model: this.model,
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'hi' }]
+      });
+      return { valid: true };
+    } catch (error) {
+      return { valid: false, error: error.message };
+    }
+  }
   
   async execute(conversation, tools) {
-    // Format messages
-    const messages = this.formatConversation(conversation);
-    
-    // Extract system message
-    const systemMessage = conversation.find(m => m.role === 'system');
-    const system = systemMessage ? systemMessage.content : undefined;
-    
-    // Build request
-    const request = {
-      model: this.model,
-      max_tokens: 4096,
-      messages: messages,
-    };
-    
-    if (system) {
-      request.system = system;
+    const maxRetries = 3;
+    let attempt = 0;
+
+    while (attempt <= maxRetries) {
+      try {
+        // Format messages
+        const messages = this.formatConversation(conversation);
+
+        // Extract system message
+        const systemMessage = conversation.find(m => m.role === 'system');
+        const system = systemMessage ? systemMessage.content : undefined;
+
+        // Build request
+        const request = {
+          model: this.model,
+          max_tokens: 4096,
+          messages: messages,
+        };
+
+        if (system) {
+          request.system = system;
+        }
+
+        if (tools && tools.length > 0) {
+          request.tools = this.formatTools(tools);
+        }
+
+        // Send request
+        const response = await this.client.messages.create(request);
+
+        return this.parseResponse(response);
+      } catch (error) {
+        const isRateLimit = error.status === 429 || 
+                            error.message?.includes('429') || 
+                            error.message?.toLowerCase().includes('too many requests');
+
+        if (isRateLimit && attempt < maxRetries) {
+          attempt++;
+          const delay = Math.pow(2, attempt) * 2000;
+          console.warn(`Claude rate limited (429). Retrying in ${delay}ms... (Attempt ${attempt}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        throw error;
+      }
     }
-    
-    if (tools && tools.length > 0) {
-      request.tools = this.formatTools(tools);
-    }
-    
-    // Send request
-    const response = await this.client.messages.create(request);
-    
-    return this.parseResponse(response);
   }
   
   formatConversation(conversation) {

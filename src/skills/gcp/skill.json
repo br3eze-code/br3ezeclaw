@@ -1,0 +1,8 @@
+{
+  "name": "gcp",
+  "version": "1.0.0",
+  "description": "Gcp skill for AgentOS",
+  "entry": "index.js",
+  "author": "AgentOS",
+  "license": "Apache-2.0"
+}

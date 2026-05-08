@@ -6,6 +6,7 @@
 
 const _chalk = require('chalk');
 const chalk  = _chalk.default || _chalk;
+const { intro, outro, note, log } = require('@clack/prompts');
 const path   = require('path');
 
 module.exports = (program) => {
@@ -24,20 +25,23 @@ module.exports = (program) => {
         const skillsDir = path.join(process.cwd(), 'src', 'skills');
         await registry.loadFromDirectory(skillsDir);
 
+        intro('📦 Skill Manager');
+
         const skills = registry.list();
         if (!skills.length) {
-          console.log(chalk.yellow('No skills installed. Drop skill folders into src/skills/'));
+          log.warn('No skills installed. Drop skill folders into src/skills/');
           return;
         }
 
-        console.log(chalk.cyan(`\n📦 Installed Skills (${skills.length})\n`));
-        skills.forEach(name => {
+        const lines = skills.map(name => {
           const s = registry.get(name);
-          console.log(`  ${chalk.green('●')} ${chalk.bold(name)} v${s.manifest.version}`);
-          console.log(`    ${chalk.gray(s.manifest.description)}\n`);
+          return `● ${chalk.bold(name)} v${s.manifest.version}\n  ${chalk.gray(s.manifest.description)}`;
         });
+
+        note(lines.join('\n\n'), `Installed Skills (${skills.length})`);
+        outro(chalk.green('✓ Listing complete.'));
       } catch (err) {
-        console.error(chalk.red(`Error: ${err.message}`));
+        log.error(`Error: ${err.message}`);
       }
     });
 
@@ -55,16 +59,19 @@ module.exports = (program) => {
         const registry = new SkillRegistry({});
         await registry.loadFromDirectory(path.join(process.cwd(), 'src', 'skills'));
 
+        intro(`⚙️ Executing Skill: ${chalk.bold(skillName)}`);
+
         if (!registry.has(skillName)) {
-          console.error(chalk.red(`✗ Skill not found: ${skillName}`));
+          log.error(`Skill not found: ${skillName}`);
           process.exit(1);
         }
 
         const skill = registry.get(skillName);
         const result = await skill.execute(options.param, { skill });
-        console.log(JSON.stringify(result, null, 2));
+        note(JSON.stringify(result, null, 2), 'Result');
+        outro(chalk.green('✓ Execution complete.'));
       } catch (err) {
-        console.error(chalk.red(`Error: ${err.message}`));
+        log.error(`Error: ${err.message}`);
         process.exit(1);
       }
     });
@@ -79,24 +86,31 @@ module.exports = (program) => {
         const registry = new SkillRegistry({});
         await registry.loadFromDirectory(path.join(process.cwd(), 'src', 'skills'));
 
+        intro(`ℹ️ Skill Info: ${chalk.bold(skillName)}`);
+
         const s = registry.get(skillName);
         if (!s) {
-          console.error(chalk.red(`✗ Skill not found: ${skillName}`));
+          log.error(`Skill not found: ${skillName}`);
           return;
         }
 
-        console.log(chalk.cyan(`\n📦 ${s.manifest.name} v${s.manifest.version}\n`));
-        console.log(chalk.gray(s.manifest.description));
+        const details = [
+          chalk.gray(s.manifest.description),
+          ''
+        ];
+
         if (s.manifest.parameters) {
-          console.log(chalk.cyan('\nParameters:'));
+          details.push(chalk.cyan('Parameters:'));
           Object.entries(s.manifest.parameters).forEach(([k, cfg]) => {
             const req = cfg.required ? chalk.red('*') : ' ';
-            console.log(`  ${req} ${chalk.bold(k)} (${cfg.type}) — ${cfg.description || ''}`);
+            details.push(`  ${req} ${chalk.bold(k)} (${cfg.type}) — ${cfg.description || ''}`);
           });
         }
-        console.log('');
+
+        note(details.join('\n'), `${s.manifest.name} v${s.manifest.version}`);
+        outro(chalk.green('✓ Done.'));
       } catch (err) {
-        console.error(chalk.red(`Error: ${err.message}`));
+        log.error(`Error: ${err.message}`);
       }
     });
 };

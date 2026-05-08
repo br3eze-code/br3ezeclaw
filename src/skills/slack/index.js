@@ -8,12 +8,16 @@ class SlackSkill extends BaseSkill {
 
   constructor(config, logger, workspace) {
     super(config, logger, workspace)
-    this.app = new App({
-      token: config.botToken,
-      signingSecret: config.signingSecret,
-      socketMode: true,
-      appToken: config.appToken
-    })
+    if (config.botToken && config.appToken) {
+      this.app = new App({
+        token: config.botToken,
+        signingSecret: config.signingSecret || '',
+        socketMode: true,
+        appToken: config.appToken
+      })
+    } else {
+      this.app = null;
+    }
     this.agent = null // set by registry after init
   }
 
@@ -74,6 +78,11 @@ class SlackSkill extends BaseSkill {
 
   async init(agent) {
     this.agent = agent
+    if (!this.app) {
+      this.logger.warn('Slack tokens (botToken, appToken) missing. SlackSkill will be inactive.')
+      return
+    }
+
     // Slash command: /agentos kick john from site-a
     this.app.command('/agentos', async ({ command, ack, respond, client }) => {
       await ack()
@@ -125,11 +134,13 @@ class SlackSkill extends BaseSkill {
   }
 
   async healthCheck() {
+    if (!this.app) return { status: 'inactive', reason: 'Missing tokens' }
     const res = await this.app.client.auth.test()
     return { status: 'ok', bot: res.user }
   }
 
   async execute(toolName, args, ctx) {
+    if (!this.app) throw new Error('SlackSkill is not configured properly (missing tokens).')
     const client = this.app.client
     switch (toolName) {
       case 'slack.message.post':
@@ -171,7 +182,7 @@ class SlackSkill extends BaseSkill {
   }
 
   async disconnect() {
-    await this.app.stop()
+    if (this.app) await this.app.stop()
   }
 }
 

@@ -1,19 +1,35 @@
-// src/domains/linux/index.js
+const BaseDomain = require('../BaseDomain');
 const { exec } = require('child_process');
+const util = require('util');
+const execAsync = util.promisify(exec);
 
-const tools = [
-  {
-    name: 'run_command',
-    description: 'Run shell command on Linux server',
-    execute: (cmd) => new Promise((resolve, reject) => {
-      exec(cmd, (err, stdout) => err ? reject(err) : resolve(stdout));
-    })
-  }
-  // add more: systemctl, apt, etc.
-];
+class LinuxDomain extends BaseDomain {
+  constructor() {
+    super();
+    this.name = 'linux';
 
-module.exports = {
-  register(registry) {
-    registry.registerDomain('linux', tools);
+    this.registerTool({
+      name: 'shell',
+      description: 'Execute a shell command',
+      execute: async (command) => {
+        try {
+          const { stdout, stderr } = await execAsync(command);
+          return stdout || stderr;
+        } catch (err) {
+          return `Error: ${err.message}`;
+        }
+      }
+    });
+
+    this.registerTool({
+      name: 'uptime',
+      description: 'Get system uptime',
+      execute: async () => {
+        const { stdout } = await execAsync('uptime -p');
+        return stdout.trim();
+      }
+    });
   }
-};
+}
+
+module.exports = LinuxDomain;

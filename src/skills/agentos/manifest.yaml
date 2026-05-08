@@ -1,0 +1,51 @@
+name: agentos
+version: 1.0.0
+description: Core management tools for printers, messaging, and system-wide operations
+author: AgentOS Team
+entry: index.js
+tools:
+  - name: broadcast
+    description: Send a message to all enabled communication channels (Telegram, Slack, Discord, WhatsApp)
+    parameters:
+      message:
+        type: string
+        description: The message to broadcast
+        required: true
+      urgent:
+        type: boolean
+        description: If true, prefixes with alert emoji
+        default: false
+  - name: printer.test
+    description: Print a diagnostic test page to the connected thermal printer
+    parameters:
+      text:
+        type: string
+        description: Optional text to include in the test print
+  - name: channels.status
+    description: Get connection status and metadata for all messaging channels
+    parameters: {}
+  - name: voucher.create
+    description: Create a new MikroTik hotspot voucher and optionally print it
+    parameters:
+      profile:
+        type: string
+        description: The profile to use for the voucher (e.g. 1Hour, 1Day)
+        required: true
+      print:
+        type: boolean
+        description: If true, sends the voucher to the thermal printer
+        default: true
+examples:
+  - user: "create a 1 hour voucher"
+    action: "agentos.voucher.create"
+    params:
+      profile: "1Hour"
+      print: true
+  - user: "broadcast Everyone please note the server maintenance tonight"
+    action: "agentos.broadcast"
+    params:
+      message: "Everyone please note the server maintenance tonight"
+  - user: "is the printer working?"
+    action: "agentos.printer.test"
+  - user: "show channel status"
+    action: "agentos.channels.status"

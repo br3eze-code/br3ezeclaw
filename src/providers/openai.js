@@ -18,26 +18,60 @@ class OpenAIProvider extends BaseProvider {
     
     this.client = new OpenAI({ apiKey: this.apiKey });
   }
+
+  async validateKey() {
+    try {
+      // Minimal call to check if key is valid
+      await this.client.chat.completions.create({
+        model: this.model,
+        messages: [{ role: 'user', content: 'hi' }],
+        max_tokens: 1
+      });
+      return { valid: true };
+    } catch (error) {
+      return { valid: false, error: error.message };
+    }
+  }
   
   async execute(conversation, tools) {
-    // Format messages
-    const messages = this.formatConversation(conversation);
-    
-    // Build request
-    const request = {
-      model: this.model,
-      messages: messages,
-    };
-    
-    if (tools && tools.length > 0) {
-      request.tools = this.formatTools(tools);
-      request.tool_choice = 'auto';
+    const maxRetries = 3;
+    let attempt = 0;
+
+    while (attempt <= maxRetries) {
+      try {
+        // Format messages
+        const messages = this.formatConversation(conversation);
+
+        // Build request
+        const request = {
+          model: this.model,
+          messages: messages,
+        };
+
+        if (tools && tools.length > 0) {
+          request.tools = this.formatTools(tools);
+          request.tool_choice = 'auto';
+        }
+
+        // Send request
+        const response = await this.client.chat.completions.create(request);
+
+        return this.parseResponse(response);
+      } catch (error) {
+        const isRateLimit = error.status === 429 || 
+                            error.message?.includes('429') || 
+                            error.message?.toLowerCase().includes('too many requests');
+
+        if (isRateLimit && attempt < maxRetries) {
+          attempt++;
+          const delay = Math.pow(2, attempt) * 2000;
+          console.warn(`OpenAI rate limited (429). Retrying in ${delay}ms... (Attempt ${attempt}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        throw error;
+      }
     }
-    
-    // Send request
-    const response = await this.client.chat.completions.create(request);
-    
-    return this.parseResponse(response);
   }
   
   formatConversation(conversation) {

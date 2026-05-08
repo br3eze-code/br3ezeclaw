@@ -18,7 +18,8 @@ const tools = {
     'user.add': async (conn, username, password, profile = 'default') => {
         const existing = await conn.menu('/ip/hotspot/user').where('name', username).get();
         if (existing.length > 0) {
-            await conn.menu('/ip/hotspot/user').update(existing[0]['.id'], { password, profile, disabled: 'no' });
+            const id = typeof existing[0] === 'object' ? (existing[0]['.id'] || existing[0].id) : existing[0];
+            await conn.menu('/ip/hotspot/user').update(id, { password, profile, disabled: 'no' });
             return { action: 'updated', username, profile };
         }
         await conn.menu('/ip/hotspot/user').add({ name: username, password, profile });
@@ -26,16 +27,22 @@ const tools = {
     },
 
     'user.remove': async (conn, username) => {
+        if (!username) throw new Error('Username required for removal');
         const users = await conn.menu('/ip/hotspot/user').where('name', username).get();
         if (!users.length) throw new Error(`User not found: ${username}`);
-        await conn.menu('/ip/hotspot/user').remove(users[0]['.id']);
+        const id = typeof users[0] === 'object' ? (users[0]['.id'] || users[0].id) : users[0];
+        if (!id) throw new Error(`Could not resolve router ID for user: ${username}. Got: ${JSON.stringify(users[0])}`);
+        await conn.menu('/ip/hotspot/user').remove(id);
         return { action: 'removed', username };
     },
 
     'user.kick': async (conn, username) => {
+        if (!username) throw new Error('Username required to kick');
         const active = await conn.menu('/ip/hotspot/active').where('user', username).get();
         if (!active.length) return { kicked: false, username, reason: 'not active' };
-        await conn.menu('/ip/hotspot/active').remove(active[0]['.id']);
+        const id = typeof active[0] === 'object' ? (active[0]['.id'] || active[0].id) : active[0];
+        if (!id) throw new Error(`Could not resolve session ID for user: ${username}. Got: ${JSON.stringify(active[0])}`);
+        await conn.menu('/ip/hotspot/active').remove(id);
         return { kicked: true, username };
     },
 
@@ -108,7 +115,9 @@ const tools = {
             .where('address', address)
             .get();
         if (!entries.length) throw new Error(`${address} not found in list "${list}"`);
-        await conn.menu('/ip/firewall/address-list').remove(entries[0]['.id']);
+        const id = typeof entries[0] === 'object' ? (entries[0]['.id'] || entries[0].id) : entries[0];
+        if (!id) throw new Error(`Could not resolve entry ID for address: ${address}. Got: ${JSON.stringify(entries[0])}`);
+        await conn.menu('/ip/firewall/address-list').remove(id);
         return { action: 'unblocked', address };
     }
 };

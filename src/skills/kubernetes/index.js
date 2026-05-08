@@ -169,6 +169,7 @@ class KubernetesSkill extends BaseSkill {
                 }
               }
             }
+          }
           await this.appsV1.patchNamespacedDeployment(args.name, ns, patch, undefined, { headers: { 'Content-Type': 'application/strategic-merge-patch+json' } })
           return { restarted: args.name, namespace: ns }
 

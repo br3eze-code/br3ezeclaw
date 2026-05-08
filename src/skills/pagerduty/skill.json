@@ -1,0 +1,8 @@
+{
+  "name": "pagerduty",
+  "version": "1.0.0",
+  "description": "Pagerduty skill for AgentOS",
+  "entry": "index.js",
+  "author": "AgentOS",
+  "license": "Apache-2.0"
+}

@@ -30,7 +30,7 @@ const validators = {
 
   // Voucher code validation
   voucherCode: (value) => {
-    return /^STAR-[A-Z0-9]{6}$/.test(value);
+    return /^STAR-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(value);
   },
 
   // Plan validation

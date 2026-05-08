@@ -1,0 +1,19 @@
+{
+  "name": "hikivision",
+  "version": "1.0.0",
+  "description": "Hikivision CCTV management — PTZ control, snapshots, stream URLs",
+  "entry": "index.js",
+  "parameters": {
+    "action": {
+      "type": "string",
+      "required": true,
+      "description": "Action to perform (e.g. ptz.move, snapshot.get, stream.url)"
+    },
+    "params": {
+      "type": "object",
+      "required": false,
+      "description": "Action parameters"
+    }
+  },
+  "tags": ["security", "cctv", "hikivision"]
+}

@@ -1,19 +1,11 @@
 name: mikrotik
-version: 1.0.0
-description: MikroTik RouterOS management and network operations
+version: 2.0.0
+description: MikroTik RouterOS management — full parity with AgentOS Sentinel RSC
 author: br3eze
 license: Apache-2.0
 
 tools:
-  - name: user.kick
-    description: Disconnect a user from the hotspot
-    parameters:
-      - name: user
-        type: string
-        required: true
-        description: Username or MAC address to kick
-    returns: boolean
-    
+  # ── Hotspot User Management ──────────────────────────────────────────────────
   - name: user.add
     description: Add a new hotspot user
     parameters:
@@ -26,29 +18,115 @@ tools:
       - name: profile
         type: string
         required: false
-        description: User profile (default, 1Day, etc)
+        description: Hotspot profile (default, 1hour, 1day, 7day, 30day)
     returns: object
-    
-  - name: users.active
-    description: List active hotspot users
+
+  - name: user.remove
+    description: Remove a hotspot user
     parameters:
-      - name: limit
+      - name: username
+        type: string
+        required: true
+    returns: object
+
+  - name: user.kick
+    description: Disconnect an active hotspot session
+    parameters:
+      - name: username
+        type: string
+        required: true
+    returns: object
+
+  - name: user.status
+    description: Get status of a hotspot user (active/inactive)
+    parameters:
+      - name: username
+        type: string
+        required: true
+    returns: object
+
+  - name: users.active
+    description: List all active hotspot sessions
+    parameters: []
+    returns: array
+
+  - name: users.all
+    description: List all hotspot users
+    parameters: []
+    returns: array
+ 
+  - name: vouchers.cleanup
+    description: Remove expired vouchers from both the database and the router
+    parameters:
+      - name: dryRun
+        type: boolean
+        required: false
+        default: false
+        description: If true, only lists what would be removed without actually deleting
+    returns: object
+
+  - name: hotspot.profiles
+    description: List hotspot user profiles with rate limits
+    parameters: []
+    returns: array
+
+  # ── System Commands ───────────────────────────────────────────────────────────
+  - name: system.stats
+    description: Get full system resource stats
+    parameters: []
+    returns: object
+
+  - name: system.resources
+    description: Get formatted resource usage (CPU, RAM, HDD, architecture)
+    parameters: []
+    returns: object
+
+  - name: system.uptime
+    description: Get router uptime and current time
+    parameters: []
+    returns: object
+
+  - name: system.identity
+    description: Get router name, model, version and serial number
+    parameters: []
+    returns: object
+
+  - name: system.health
+    description: Get system health score, temperature, voltage
+    parameters: []
+    returns: object
+
+  - name: system.full_stats
+    description: Get a comprehensive overview of router identity, resources, health, and neighbors
+    parameters: []
+    returns: object
+
+  - name: system.logs
+    description: Get recent system log entries
+    parameters:
+      - name: lines
         type: number
         required: false
-        description: Maximum number of users to return
+        default: 10
     returns: array
-    
-  - name: system.stats
-    description: Get router system statistics
+
+  - name: system.reboot
+    description: Reboot the router (with confirmation)
     parameters: []
     returns: object
-    
-  - name: system.reboot
-    description: Reboot the router
+
+  - name: system.shutdown
+    description: Shut down the router
     parameters: []
-    returns: boolean
-    
-  - name: network.ping
+    returns: object
+
+  - name: system.backup
+    description: Create a router backup and config export
+    parameters: []
+    returns: object
+
+  # ── Network Tools ─────────────────────────────────────────────────────────────
+  - name: ping
     description: Ping a host
     parameters:
       - name: host
@@ -58,23 +136,162 @@ tools:
         type: number
         required: false
         default: 4
-    returns: object
-    
-  - name: network.traceroute
-    description: Traceroute to a host
+    returns: array
+
+  - name: traceroute
+    description: Trace route to a host
     parameters:
       - name: host
         type: string
         required: true
     returns: array
-    
-  - name: firewall.list
-    description: List firewall rules
+
+  - name: speedtest
+    description: Run a speed test on an interface
     parameters:
-      - name: chain
+      - name: iface
         type: string
         required: false
-        description: Filter by chain (input, forward, output)
+        default: ether1
+    returns: object
+
+  - name: bandwidth
+    description: Run a bandwidth test to a host
+    parameters:
+      - name: target
+        type: string
+        required: true
+      - name: duration
+        type: number
+        required: false
+        default: 10
+    returns: object
+
+  - name: flood
+    description: Run a flood-ping test to a host
+    parameters:
+      - name: target
+        type: string
+        required: true
+      - name: count
+        type: number
+        required: false
+        default: 100
+    returns: object
+
+  - name: sniff
+    description: Quick packet sniffer (returns traffic sample)
+    parameters:
+      - name: duration
+        type: number
+        required: false
+        default: 5
+    returns: object
+
+  - name: dns.flush
+    description: Flush the DNS cache
+    parameters: []
+    returns: object
+
+  # ── Network Info ──────────────────────────────────────────────────────────────
+  - name: ip.addresses
+    description: List all IP addresses assigned to interfaces
+    parameters: []
+    returns: array
+
+  - name: ip.routes
+    description: List the routing table
+    parameters:
+      - name: limit
+        type: number
+        required: false
+        default: 20
+    returns: array
+
+  - name: dns
+    description: Get DNS server settings and cache usage
+    parameters: []
+    returns: object
+
+  - name: dhcp.leases
+    description: List DHCP leases
+    parameters: []
+    returns: array
+
+  - name: interface.list
+    description: List network interfaces with traffic stats
+    parameters: []
+    returns: array
+
+  - name: arp.table
+    description: List ARP table entries
+    parameters: []
+    returns: array
+
+  - name: system.neighbors
+    description: List network neighbors (CDP/LLDP)
+    parameters: []
+    returns: array
+
+  # ── Firewall ──────────────────────────────────────────────────────────────────
+  - name: firewall.list
+    description: List firewall rules by type
+    parameters:
+      - name: type
+        type: string
+        required: false
+        default: filter
+        description: filter | nat | mangle | raw
+    returns: array
+
+  - name: firewall.summary
+    description: Count rules across all firewall chains + active connections
+    parameters: []
+    returns: object
+
+  - name: firewall.connections
+    description: List active firewall connections
+    parameters:
+      - name: limit
+        type: number
+        required: false
+        default: 30
+    returns: array
+
+  - name: firewall.block
+    description: Block an IP or MAC address
+    parameters:
+      - name: target
+        type: string
+        required: true
+      - name: list
+        type: string
+        required: false
+        default: blocked
+      - name: comment
+        type: string
+        required: false
+    returns: object
+
+  - name: firewall.unblock
+    description: Unblock an IP or MAC address
+    parameters:
+      - name: target
+        type: string
+        required: true
+      - name: list
+        type: string
+        required: false
+        default: blocked
+    returns: object
+
+  - name: nat.list
+    description: List NAT rules
+    parameters:
+      - name: limit
+        type: number
+        required: false
+        default: 20
     returns: array
 
 config:
@@ -82,27 +299,26 @@ config:
     type: string
     default: 192.168.88.1
     description: Router IP address
-    
+
   - name: port
     type: number
     default: 8728
-    description: API port
-    
+    description: RouterOS API port
+
   - name: username
     type: string
     required: true
     description: API username
-    
+
   - name: password
     type: string
     required: true
     secret: true
     description: API password
-    
+
   - name: timeout
     type: number
-    default: 5000
+    default: 10000
     description: Connection timeout in milliseconds
 
 dependencies: []
-
