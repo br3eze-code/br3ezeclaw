@@ -3,6 +3,8 @@ const fs   = require('fs').promises;
 const fss  = require('fs');            // sync checks
 const path = require('path');
 const EventEmitter = require('events');
+const { logger } = require('./logger');
+const yaml = require('js-yaml');
 
 class SkillRegistry extends EventEmitter {
   constructor(config) {
@@ -21,6 +23,7 @@ class SkillRegistry extends EventEmitter {
       const entries = await fs.readdir(skillsPath, { withFileTypes: true });
       
       for (const entry of entries) {
+        logger.debug(`SkillRegistry: Checking entry ${entry.name} (isDirectory: ${entry.isDirectory()})`);
         if (!entry.isDirectory()) continue;
         
         const skillPath = path.join(skillsPath, entry.name);
@@ -39,21 +42,25 @@ class SkillRegistry extends EventEmitter {
 
   async loadSkill(skillPath) {
     try {
-      // ── 1. Load manifest (skill.json preferred, manifest.yaml fallback) ────
+      // ── 1. Load manifest (manifest.yaml preferred, skill.json fallback) ────
       let manifest;
-      const jsonManifest  = path.join(skillPath, 'skill.json');
       const yamlManifest  = path.join(skillPath, 'manifest.yaml');
       const yamlManifest2 = path.join(skillPath, 'manifest.yml');
+      const jsonManifest  = path.join(skillPath, 'skill.json');
 
-      if (fss.existsSync(jsonManifest)) {
-        manifest = JSON.parse(await fs.readFile(jsonManifest, 'utf8'));
-      } else if (fss.existsSync(yamlManifest) || fss.existsSync(yamlManifest2)) {
+      if (fss.existsSync(yamlManifest) || fss.existsSync(yamlManifest2)) {
+        console.log(`[SkillRegistry] Found YAML manifest for ${path.basename(skillPath)}`);
         const file = fss.existsSync(yamlManifest) ? yamlManifest : yamlManifest2;
-        // Parse minimal YAML without an external dep (name/version/description lines)
-        const raw = await fs.readFile(file, 'utf8');
-        manifest = this._parseSimpleYaml(raw);
+        manifest = yaml.load(await fs.readFile(file, 'utf8'));
+      } else if (fss.existsSync(jsonManifest)) {
+        console.log(`[SkillRegistry] Found JSON manifest for ${path.basename(skillPath)}`);
+        manifest = JSON.parse(await fs.readFile(jsonManifest, 'utf8'));
       } else {
-        throw new Error('No skill.json or manifest.yaml found');
+        console.log(`[SkillRegistry] No manifest found in ${skillPath}`);
+        console.log(`  Checked: ${yamlManifest}`);
+        console.log(`  Checked: ${yamlManifest2}`);
+        console.log(`  Checked: ${jsonManifest}`);
+        throw new Error('No manifest.yaml or skill.json found');
       }
 
       this.validateManifest(manifest);
@@ -66,12 +73,10 @@ class SkillRegistry extends EventEmitter {
       if (fss.existsSync(implPath)) {
         impl = require(path.resolve(implPath));
       } else {
-        // Stub implementation — skill is metadata-only
         impl = {};
       }
 
       // ── 3. Normalise to { execute, initialize, destroy, validate } ─────────
-      // Handles: plain object exports, class instances, or factories
       const mod = (typeof impl === 'function' && impl.prototype?.execute)
         ? new impl()  // class
         : impl;
@@ -81,38 +86,40 @@ class SkillRegistry extends EventEmitter {
         execute:    this.wrapExecution(
                       (mod.execute || (() => ({ status: 'no-op', skill: manifest.name }))).bind(mod)
                     ),
-        validate:   mod.validate    || this.defaultValidate,
-        initialize: mod.initialize  || (() => Promise.resolve()),
-        destroy:    mod.destroy     || (() => Promise.resolve()),
+        validate:   (mod.validate   || this.defaultValidate).bind(mod),
+        initialize: (mod.initialize || (() => Promise.resolve())).bind(mod),
+        destroy:    (mod.destroy    || (() => Promise.resolve())).bind(mod),
         path: skillPath
       };
 
-      await skill.initialize(this.config);
+      const skillName = manifest.name || path.basename(skillPath);
+      logger.info(`SkillRegistry: Initializing ${skillName}...`);
+      
+      const start = Date.now();
+      const timeout = setTimeout(() => {
+        logger.warn(`SkillRegistry: Skill ${skillName} is taking a long time to initialize (>2s)...`);
+      }, 2000);
+
+      try {
+        await skill.initialize(this.config);
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      const duration = Date.now() - start;
+      logger.info(`SkillRegistry: ${skillName} initialized in ${duration}ms`);
+      
       this.skills.set(manifest.name, skill);
       this.emit('skillLoaded', manifest.name);
 
     } catch (error) {
-      console.error(`Failed to load skill from ${path.basename(skillPath)}:`, error.message);
+      const skillName = path.basename(skillPath);
+      logger.error(`Failed to load skill from ${skillName}: ${error.message}`);
+      if (error.stack) {
+        logger.debug(error.stack);
+      }
       this.emit('skillError', { path: skillPath, error });
     }
-  }
-
-  /** Tiny YAML scalar parser — handles ONLY top-level (non-indented) string/number fields */
-  _parseSimpleYaml(raw) {
-    const result = {};
-    for (const line of raw.split('\n')) {
-      // Skip blank lines, comments, and indented lines (arrays/nested maps)
-      if (!line.trim() || line.startsWith('#') || /^\s/.test(line)) continue;
-      const m = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.+)$/);
-      if (m) {
-        const [, key, val] = m;
-        const trimmed = val.trim().replace(/^['"\[].*/, '').trim() // skip arrays/objects
-                        || val.trim().replace(/^['"](.*)['"]$/, '$1');
-        if (!trimmed) continue;
-        result[key] = isNaN(trimmed) ? val.trim().replace(/^['"](.*)['"]$/, '$1') : Number(trimmed);
-      }
-    }
-    return result;
   }
 
 
@@ -209,8 +216,51 @@ class SkillRegistry extends EventEmitter {
       description: s.manifest.description,
       version: s.manifest.version,
       parameters: s.manifest.parameters,
-      examples: s.manifest.examples
+      examples: s.manifest.examples,
+      tools: s.manifest.tools || []
     }));
+  }
+
+  /** Returns all tools across all skills in a format for the LLM */
+  getAllToolDefinitions() {
+    const definitions = [];
+    for (const [skillName, skill] of this.skills) {
+      if (skill.manifest.tools) {
+        for (const tool of skill.manifest.tools) {
+          definitions.push({
+            name: `${skillName}.${tool.name}`,
+            description: tool.description,
+            parameters: tool.parameters,
+            returns: tool.returns
+          });
+        }
+      } else {
+        // Fallback for legacy skills without a tools array
+        definitions.push({
+          name: skillName,
+          description: skill.manifest.description,
+          parameters: skill.manifest.parameters || {},
+          returns: 'any'
+        });
+      }
+    }
+    return definitions;
+  }
+
+  async executeTool(toolFullName, params, context) {
+    const [skillName, ...toolPath] = toolFullName.split('.');
+    const toolName = toolPath.join('.');
+    
+    const skill = this.skills.get(skillName);
+    if (!skill) throw new Error(`Skill not found: ${skillName}`);
+    
+    // If the skill has multiple tools, pass the toolName to the execute function
+    if (toolName) {
+      return await skill.execute(toolName, params, context);
+    }
+    
+    // Otherwise just execute the skill with params
+    return await skill.execute(params, context);
   }
 
   addHook(type, handler) {

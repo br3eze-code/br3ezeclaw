@@ -7,7 +7,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const yaml = require('js-yaml');
-const { Logger } = require('../utils/logger');
+const { logger } = require('./logger');
 
 class ToolRegistry {
   constructor(options = {}) {
@@ -15,7 +15,7 @@ class ToolRegistry {
     this.tools = new Map();
     this.skills = new Map();
     this.hooks = new Map();
-    this.logger = new Logger('ToolRegistry');
+    this.logger = logger;
     this.manifestCache = null;
   }
   
@@ -41,19 +41,37 @@ class ToolRegistry {
   }
   
   /**
-   * Load a single skill
+   * Load a single skill — tries manifest.yaml → manifest.yml → skill.json
    */
   async loadSkill(skillName) {
     const skillPath = path.join(this.skillsPath, skillName);
-    const manifestPath = path.join(skillPath, 'manifest.yaml');
-    
+
+    // ── Resolve manifest (yaml preferred, json fallback) ──────────────────────
+    let manifestContent, manifestFile, manifest;
+    const candidates = [
+      { file: path.join(skillPath, 'manifest.yaml'), type: 'yaml' },
+      { file: path.join(skillPath, 'manifest.yml'),  type: 'yaml' },
+      { file: path.join(skillPath, 'skill.json'),    type: 'json' }
+    ];
+
+    for (const candidate of candidates) {
+      try {
+        await fs.access(candidate.file);
+        manifestFile    = candidate.file;
+        manifestContent = await fs.readFile(candidate.file, 'utf8');
+        manifest = candidate.type === 'yaml'
+          ? yaml.load(manifestContent)
+          : JSON.parse(manifestContent);
+        break;
+      } catch (_) { /* try next */ }
+    }
+
+    if (!manifest) {
+      this.logger.warn(`No manifest found for skill "${skillName}" (checked manifest.yaml / manifest.yml / skill.json)`);
+      return false;
+    }
+
     try {
-      // Check if manifest exists
-      await fs.access(manifestPath);
-      
-      // Parse manifest
-      const manifestContent = await fs.readFile(manifestPath, 'utf8');
-      const manifest = yaml.load(manifestContent);
       
       this.logger.info(`Loading skill: ${manifest.name} v${manifest.version}`);
       

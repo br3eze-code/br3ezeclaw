@@ -1,4 +1,16 @@
 // src/core/ToolRegistry.js
+const { logger } = require('./logger');
+
+// Placeholder for permissionPolicy and hooks if they aren't available yet
+const permissionPolicy = {
+  check: () => ({ allowed: true })
+};
+
+const hooks = {
+  runBefore: async () => {},
+  runAfter: async () => {}
+};
+
 class ToolRegistry {
   constructor() {
     this.tools = new Map();   // 'domain.tool.name' → { execute, schema, description, domain }
@@ -6,6 +18,10 @@ class ToolRegistry {
   }
 
   registerDomain(domainName, tools) {
+    if (!Array.isArray(tools)) {
+      logger.error(`Failed to register domain ${domainName}: tools must be an array`);
+      return;
+    }
     this.domains.add(domainName);
     tools.forEach(tool => {
       const fullName = `${domainName}.${tool.name}`;
@@ -26,7 +42,6 @@ class ToolRegistry {
     const tool = this.tools.get(fullToolName);
     if (!tool) throw new Error(`Tool ${fullToolName} not found`);
 
-    // Permission + hooks (move your existing ones here)
     const perm = permissionPolicy.check(fullToolName);
     if (!perm.allowed) throw new Error(perm.reason);
 

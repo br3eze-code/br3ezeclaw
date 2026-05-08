@@ -188,7 +188,7 @@ class SessionManager {
    */
   getSessionPath(sessionId) {
     // Ensure safe path
-    const safeId = sessionId.replace(/\\.+/g, '.').replace(/[^a-zA-Z0-9_\\-\\/]/g, '_');
+    const safeId = sessionId.replace(/\.+/g, '.').replace(/[^a-zA-Z0-9_\-\/\\]/g, '_');
     return path.join(this.basePath, `${safeId}.jsonl`);
   }
   
