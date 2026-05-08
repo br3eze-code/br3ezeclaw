@@ -11,7 +11,7 @@
 </div>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AgentOS-2026.5.4-blue?style=for-the-badge&logo=router&logoColor=white" alt="Version">
+  <img src="https://img.shields.io/badge/AgentOS-2026.5.61-blue?style=for-the-badge&logo=router&logoColor=white" alt="Version">
   <img src="https://img.shields.io/badge/MikroTik-RouterOS-green?style=for-the-badge&logo=mikrotik" alt="MikroTik">
   <img src="https://img.shields.io/badge/AI-Gemini%202.5-orange?style=for-the-badge&logo=google" alt="AI">
 </p>
