@@ -1,0 +1,76 @@
+{
+  "env": {
+    "node": true,
+    "commonjs": true,
+    "es2022": true,
+    "jest/globals": false
+  },
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "script"
+  },
+  "plugins": [
+    "prettier"
+  ],
+  "extends": [
+    "eslint:recommended",
+    "plugin:prettier/recommended"
+  ],
+  "rules": {
+    "prettier/prettier": "warn",
+
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-console": "off",
+    "no-process-exit": "off",
+
+    "eqeqeq": ["error", "always", { "null": "ignore" }],
+    "no-var": "error",
+    "prefer-const": "warn",
+    "prefer-template": "warn",
+    "object-shorthand": "warn",
+
+    "no-throw-literal": "error",
+    "no-return-await": "warn",
+    "require-await": "warn",
+
+    "no-shadow": ["warn", { "hoist": "functions" }],
+    "no-use-before-define": ["error", { "functions": false, "classes": true, "variables": true }]
+  },
+  "overrides": [
+    {
+      "files": ["tests/**/*.test.js", "tests/**/*.spec.js"],
+      "env": {
+        "jest/globals": true
+      },
+      "plugins": ["prettier"],
+      "globals": {
+        "jest": "readonly",
+        "describe": "readonly",
+        "test": "readonly",
+        "it": "readonly",
+        "expect": "readonly",
+        "beforeEach": "readonly",
+        "afterEach": "readonly",
+        "beforeAll": "readonly",
+        "afterAll": "readonly"
+      },
+      "rules": {
+        "require-await": "off",
+        "no-return-await": "off"
+      }
+    },
+    {
+      "files": ["scripts/**/*.js"],
+      "rules": {
+        "no-process-exit": "off"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "node_modules/",
+    "dist/",
+    "coverage/",
+    "data/",
+    "*.min.js"
+  ]
+}
