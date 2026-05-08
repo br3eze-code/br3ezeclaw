@@ -2,8 +2,7 @@
   "env": {
     "node": true,
     "commonjs": true,
-    "es2022": true,
-    "jest/globals": false
+    "es2022": true
   },
   "parserOptions": {
     "ecmaVersion": 2022,
@@ -21,7 +20,6 @@
 
     "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
     "no-console": "off",
-    "no-process-exit": "off",
 
     "eqeqeq": ["error", "always", { "null": "ignore" }],
     "no-var": "error",
@@ -39,10 +37,6 @@
   "overrides": [
     {
       "files": ["tests/**/*.test.js", "tests/**/*.spec.js"],
-      "env": {
-        "jest/globals": true
-      },
-      "plugins": ["prettier"],
       "globals": {
         "jest": "readonly",
         "describe": "readonly",
@@ -60,7 +54,7 @@
       }
     },
     {
-      "files": ["scripts/**/*.js"],
+      "files": ["scripts/**/*.js", "bin/**/*.js"],
       "rules": {
         "no-process-exit": "off"
       }
