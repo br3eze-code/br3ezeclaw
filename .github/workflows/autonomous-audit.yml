@@ -1,0 +1,106 @@
+name: Autonomous Audit
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Sunday 02:00 UTC = 04:00 Africa/Harare
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: autonomous-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: AI Skill Chain Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # --ignore-scripts skips postinstall.js and preuninstall.js
+      - name: Install (no hooks)
+        run: npm ci --ignore-scripts
+
+      - name: Run Audit Skill Chain
+        run: node .github/scripts/run-skill-chain.js
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        timeout-minutes: 25
+
+      - name: Upload audit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-${{ github.run_id }}
+          path: docs/audit/
+          retention-days: 90
+
+      - name: Commit audit results + patches
+        run: |
+          git config user.name  "agentos-audit[bot]"
+          git config user.email "agentos-audit[bot]@users.noreply.github.com"
+
+          # Stage audit reports
+          git add docs/audit/
+          # Stage any source files patched by PHASE 5
+          git add -u
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            DATE=$(date -u +"%Y-%m-%d")
+            SEC=$(node -e "const j=require('./docs/audit/latest.json');process.stdout.write(String(j.security?.CRITICAL??0))")
+            BUG=$(node -e "const j=require('./docs/audit/latest.json');process.stdout.write(String(j.bugs?.CRASH??0))")
+            PAT=$(node -e "const j=require('./docs/audit/latest.json');process.stdout.write((j.patches_applied||[]).length.toString())")
+            git commit -m "audit($DATE): CRITICAL=$SEC CRASH=$BUG patched=$PAT [skip ci]"
+            git push origin main
+            echo "Committed."
+          fi
+
+      - name: Telegram summary
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALLOWED_CHAT_ID: ${{ secrets.TELEGRAM_ALLOWED_CHAT_ID }}
+        run: |
+          [ -z "$TELEGRAM_BOT_TOKEN" ] && exit 0
+
+          DATE=$(date -u +"%Y-%m-%d")
+          SEC_C="?"; SEC_H="?"; BUG_C="?"; PAT="0"; RES="0"
+
+          if [ -f docs/audit/latest.json ]; then
+            SEC_C=$(node -e "const j=require('./docs/audit/latest.json');process.stdout.write(String(j.security?.CRITICAL??'?'))")
+            SEC_H=$(node -e "const j=require('./docs/audit/latest.json');process.stdout.write(String(j.security?.HIGH??'?'))")
+            BUG_C=$(node -e "const j=require('./docs/audit/latest.json');process.stdout.write(String(j.bugs?.CRASH??'?'))")
+            PAT=$(node -e "const j=require('./docs/audit/latest.json');process.stdout.write((j.patches_applied||[]).length.toString())")
+            RES=$(node -e "const j=require('./docs/audit/latest.json');process.stdout.write(String(j.research_count??0))")
+          fi
+
+          STATUS="${{ job.status }}"
+          EMOJI="✅"; [ "$STATUS" != "success" ] && EMOJI="❌"
+
+          MSG="${EMOJI} *AgentOS Weekly Audit — ${DATE}*
+
+🛡 Security: CRITICAL=\`${SEC_C}\` HIGH=\`${SEC_H}\`
+🐛 Bugs: CRASH=\`${BUG_C}\`
+🔬 Research: \`${RES}\` items
+🔧 Auto-patched: \`${PAT}\` fixes pushed to main
+📄 Report: \`docs/audit/${DATE}.md\`
+🔗 [View run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_ALLOWED_CHAT_ID}" \
+            -d parse_mode="Markdown" \
+            -d text="${MSG}" || echo "Telegram send failed (non-fatal)"
