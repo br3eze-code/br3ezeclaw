@@ -12,7 +12,15 @@ class MikroTikSkill {
   async initialize(config) {
     this.config = config;
     // Start connection pool cleanup
-    this.cleanupInterval = setInterval(() => this.cleanupPools(), 300000);
+    if (this.cleanupInterval) clearInterval(this.cleanupInterval);
+    this.cleanupInterval = setInterval(() => {
+      if (typeof this.cleanupPools === 'function') {
+        this.cleanupPools();
+      }
+    }, 300000);
+    if (this.cleanupInterval.unref) {
+      this.cleanupInterval.unref();
+    }
   }
 
   async execute(params, context) {

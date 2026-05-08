@@ -1,0 +1,56 @@
+{
+  "name": "mesh",
+  "version": "2026.7.0",
+  "description": "Multi-router mesh management via NodeRegistry — list, register, and execute tools across router fleet",
+  "domain": "networking",
+  "dispatch": "manage_mesh",
+  "entry": "index.js",
+  "parameters": {
+    "action": {
+      "type": "string",
+      "enum": [
+        "nodes.list",
+        "nodes.register",
+        "nodes.exec",
+        "mesh.exec"
+      ],
+      "required": true
+    },
+    "name": {
+      "type": "string",
+      "description": "Router node name"
+    },
+    "host": {
+      "type": "string",
+      "description": "Router IP address"
+    },
+    "port": {
+      "type": "integer",
+      "default": 8728,
+      "description": "RouterOS API port"
+    },
+    "user": {
+      "type": "string",
+      "default": "admin"
+    },
+    "password": {
+      "type": "string",
+      "description": "RouterOS admin password"
+    },
+    "role": {
+      "type": "string",
+      "enum": ["core", "branch", "edge"],
+      "default": "branch"
+    },
+    "tool": {
+      "type": "string",
+      "description": "Tool name to execute on node(s)"
+    },
+    "params": {
+      "type": "object",
+      "description": "Parameters to pass to the tool"
+    }
+  },
+  "permissions": ["mesh:read", "mesh:write"],
+  "tags": ["mesh", "nodes", "fleet", "multi-router", "noderegistry"]
+}

@@ -7,7 +7,8 @@ class TTSSkill {
   constructor() {
     this.providers = new Map();
     this.cache = new Map();
-    this.cacheDir = './cache/tts';
+    const os = require('os');
+    this.cacheDir = path.join(process.cwd(), 'cache', 'tts');
   }
 
   async initialize() {
@@ -158,7 +159,8 @@ class EdgeTTSProvider {
     const { promisify } = require('util');
     const execAsync = promisify(exec);
 
-    const tempFile = `/tmp/tts-${Date.now()}.mp3`;
+    const os = require('os');
+    const tempFile = path.join(os.tmpdir(), `tts-${Date.now()}.mp3`);
     
     try {
       await execAsync(`edge-tts --voice "${voice}" --rate="${Math.round((speed - 1) * 100)}%" --text "${text.replace(/"/g, '\\"')}" --write-media "${tempFile}"`);
@@ -266,8 +268,7 @@ class LocalTTSProvider {
     const { promisify } = require('util');
     const execAsync = promisify(exec);
     const os = require('os');
-
-    const tempFile = `/tmp/tts-local-${Date.now()}.${format}`;
+    const tempFile = path.join(os.tmpdir(), `tts-local-${Date.now()}.${format}`);
     const platform = os.platform();
 
     try {

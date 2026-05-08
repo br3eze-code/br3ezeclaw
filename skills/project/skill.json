@@ -1,0 +1,54 @@
+{
+  "name": "project",
+  "version": "2026.7.0",
+  "description": "CPM + EVM project tracking — critical path, earned value, schedule/cost performance",
+  "domain": "productivity",
+  "dispatch": "manage_project",
+  "entry": "index.js",
+  "parameters": {
+    "action": {
+      "type": "string",
+      "enum": [
+        "project.create",
+        "project.list",
+        "project.get",
+        "project.update",
+        "project.delete",
+        "project.critical_path",
+        "project.evm",
+        "project.report",
+        "project.export"
+      ],
+      "required": true
+    },
+    "id": {
+      "type": "string",
+      "description": "Project ID"
+    },
+    "project": {
+      "type": "object",
+      "properties": {
+        "name":  { "type": "string" },
+        "bac":   { "type": "number", "description": "Budget at Completion (USD)" },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id":           { "type": "string" },
+              "title":        { "type": "string" },
+              "duration":     { "type": "number", "description": "Days" },
+              "dependencies": { "type": "array",  "items": { "type": "string" } },
+              "plannedValue": { "type": "number", "description": "EVM PV in USD" },
+              "earnedValue":  { "type": "number", "description": "EVM EV in USD" },
+              "actualCost":   { "type": "number", "description": "EVM AC in USD" },
+              "status":       { "type": "string", "enum": ["open", "in_progress", "completed"] }
+            }
+          }
+        }
+      }
+    }
+  },
+  "permissions": ["project:read", "project:write"],
+  "tags": ["project", "cpm", "evm", "planning", "earned-value", "critical-path"]
+}

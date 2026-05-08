@@ -1,0 +1,54 @@
+{
+  "name": "finance",
+  "version": "2026.7.0",
+  "description": "Financial engine — revenue reports, 7-day trends, audit trail, enhanced P2P credits, Mastercard A2A payments",
+  "domain": "finance",
+  "dispatch": "manage_finance",
+  "entry": "index.js",
+  "parameters": {
+    "action": {
+      "type": "string",
+      "enum": [
+        "finance.report",
+        "finance.trends",
+        "finance.audit",
+        "p2p.transfer",
+        "p2p.resolve",
+        "mastercard.initiate",
+        "mastercard.status"
+      ],
+      "required": true
+    },
+    "from": {
+      "type": "string",
+      "description": "Sender UID or identifier (P2P)"
+    },
+    "to": {
+      "type": "string",
+      "description": "Recipient phone (E.164), email, or username (P2P)"
+    },
+    "amount": {
+      "type": "number",
+      "description": "Transfer amount in USD"
+    },
+    "identifier": {
+      "type": "string",
+      "description": "Phone, email, or username for identity resolution"
+    },
+    "voucherCode": {
+      "type": "string",
+      "description": "Voucher code for Mastercard payment initiation"
+    },
+    "paymentId": {
+      "type": "string",
+      "description": "Mastercard payment ID for status check"
+    },
+    "limit": {
+      "type": "integer",
+      "default": 50,
+      "description": "Max audit events to return"
+    }
+  },
+  "permissions": ["finance:read", "finance:write"],
+  "tags": ["finance", "revenue", "p2p", "mastercard", "a2a", "audit"]
+}

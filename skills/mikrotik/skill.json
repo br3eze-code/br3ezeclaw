@@ -1,25 +1,35 @@
-// skills/mikrotik/skill.json 
 {
-  "name": "mikrotik.users",
-  "version": "1.0.0",
-  "description": "Manage MikroTik Hotspot users",
- "domain": "networking",
+  "name": "mikrotik",
+  "version": "2026.7.0",
+  "description": "MikroTik RouterOS v7 — hotspot users, firewall, system, network diagnostics",
+  "domain": "networking",
+  "dispatch": "manage_network",
+  "entry": "index.js",
   "parameters": {
     "action": {
       "type": "string",
-      "enum": ["list", "kick", "add", "remove"],
+      "enum": [
+        "system.stats", "system.reboot", "system.backup",
+        "users.active", "users.all",
+        "user.add", "user.remove", "user.kick",
+        "dhcp.leases", "arp.table", "interfaces", "wireless.clients",
+        "ip.routes", "wireless.set_frequency",
+        "firewall.block", "firewall.unblock",
+        "ping", "traceroute", "dns.flush"
+      ],
       "required": true
-    },
-    "username": {
-      "type": "string",
-      "required": false
     },
     "router": {
       "type": "string",
-      "required": true,
-      "description": "Router node ID"
+      "required": false,
+      "description": "Router node ID (uses default node if omitted)"
+    },
+    "params": {
+      "type": "object",
+      "required": false,
+      "description": "Action-specific parameters (username, host, target, etc.)"
     }
   },
-  "permissions": ["router:read", "router:write"],
-  "tags": ["network", "hotspot", "users"]
+  "permissions": ["router:read", "router:write", "router:danger"],
+  "tags": ["network", "hotspot", "mikrotik", "firewall", "users", "mesh"]
 }

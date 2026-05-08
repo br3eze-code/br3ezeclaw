@@ -1,0 +1,59 @@
+{
+  "name": "voucher",
+  "version": "2026.7.0",
+  "description": "Voucher system — STAR-XXXXXX codes, MikroTik provisioning, QR codes, recurring billing auto-renewal",
+  "domain": "billing",
+  "dispatch": "manage_vouchers",
+  "entry": "index.js",
+  "parameters": {
+    "action": {
+      "type": "string",
+      "enum": [
+        "voucher.create",
+        "voucher.redeem",
+        "voucher.list",
+        "voucher.stats",
+        "voucher.revoke",
+        "voucher.renew"
+      ],
+      "required": true
+    },
+    "plan": {
+      "type": "string",
+      "enum": ["1hour", "1Day", "7Day", "30Day"],
+      "description": "Voucher plan"
+    },
+    "code": {
+      "type": "string",
+      "description": "Voucher code (STAR-XXXXXX format)",
+      "pattern": "^STAR-[A-F0-9]{6}$"
+    },
+    "user": {
+      "type": "string",
+      "description": "Username for redeem/renew"
+    },
+    "actor": {
+      "type": "string",
+      "description": "Creator chatId or system identifier"
+    },
+    "paymentId": {
+      "type": "string",
+      "description": "Mastercard A2A payment ID (optional)"
+    },
+    "walletBalance": {
+      "type": "number",
+      "description": "Current wallet balance in USD (for auto-renew)"
+    },
+    "limit": {
+      "type": "integer",
+      "default": 20,
+      "description": "Max vouchers to return in list"
+    },
+    "used": {
+      "type": "boolean",
+      "description": "Filter by redeemed status"
+    }
+  },
+  "permissions": ["voucher:read", "voucher:write"],
+  "tags": ["voucher", "billing", "mikrotik", "qr", "recurring", "mastercard"]
+}

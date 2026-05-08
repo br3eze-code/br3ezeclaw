@@ -1,0 +1,11 @@
+name: test
+version: 1.0.0
+description: A test skill for AgentOS interaction validation.
+entry: index.js
+tools:
+  - name: echo
+    description: Echoes back the message.
+    parameters:
+      message:
+        type: string
+        required: true

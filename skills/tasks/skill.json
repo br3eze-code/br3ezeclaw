@@ -1,14 +1,19 @@
-// skills/tasks/skill.json
 {
   "name": "tasks",
-  "version": "1.0.0",
-  "description": "Task and project management",
+  "version": "2026.7.0",
+  "description": "Task management and CPM+EVM project tracking (manage_project dispatcher)",
   "domain": "productivity",
+  "dispatch": "manage_project",
   "entry": "index.js",
   "parameters": {
     "action": {
       "type": "string",
-      "enum": ["create", "list", "update", "delete", "assign", "complete"],
+      "enum": [
+        "create", "list", "update", "delete", "assign", "complete",
+        "project.create", "project.update", "project.critical_path",
+        "project.evm", "project.report", "project.list",
+        "project.get", "project.delete", "project.export"
+      ],
       "required": true
     },
     "provider": {
@@ -19,15 +24,30 @@
     "task": {
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "title": { "type": "string" },
+        "id":          { "type": "string" },
+        "title":       { "type": "string" },
         "description": { "type": "string" },
-        "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent"] },
-        "dueDate": { "type": "string" },
-        "assignee": { "type": "string" },
-        "tags": { "type": "array" },
-        "project": { "type": "string" }
+        "priority":    { "type": "string", "enum": ["low", "medium", "high", "urgent"] },
+        "dueDate":     { "type": "string" },
+        "assignee":    { "type": "string" },
+        "tags":        { "type": "array" },
+        "project":     { "type": "string" },
+        "dependencies":{ "type": "array", "description": "Task IDs this task depends on (CPM)" },
+        "duration":    { "type": "number", "description": "Estimated duration in days (CPM)" },
+        "actualCost":  { "type": "number", "description": "Actual cost incurred (EVM AC)" },
+        "plannedValue":{ "type": "number", "description": "Planned budget for task (EVM PV)" },
+        "earnedValue": { "type": "number", "description": "EV based on % complete (EVM EV)" }
+      }
+    },
+    "project": {
+      "type": "object",
+      "properties": {
+        "id":    { "type": "string" },
+        "name":  { "type": "string" },
+        "bac":   { "type": "number", "description": "Budget at Completion" },
+        "tasks": { "type": "array", "description": "Array of task objects" }
       }
     }
-  }
+  },
+  "tags": ["tasks", "project", "cpm", "evm", "planning"]
 }

@@ -1,7 +1,8 @@
 
 // skills/nanopdf/index.js
-const puppeteer = require('puppeteer-core');
-const { PDFDocument, PDFPage, StandardFonts, rgb } = require('pdf-lib');
+// skills/nanopdf/index.js
+// const puppeteer = require('puppeteer-core'); // Lazy loaded
+// const { PDFDocument, PDFPage, StandardFonts, rgb } = require('pdf-lib'); // Lazy loaded
 const fs = require('fs').promises;
 const path = require('path');
 
@@ -9,18 +10,50 @@ class NanoPDFSkill {
   constructor() {
     this.browser = null;
     this.templates = new Map();
-    this.cacheDir = './cache/pdf';
+    this.cacheDir = path.join(process.cwd(), 'cache', 'pdf');
+    this._cleanups = new Set();
   }
 
   async initialize() {
     await fs.mkdir(this.cacheDir, { recursive: true });
     
+    // Lazy load dependencies
+    try {
+      this.puppeteer = require('puppeteer-core');
+      const pdflib = require('pdf-lib');
+      this.PDFDocument = pdflib.PDFDocument;
+      this.StandardFonts = pdflib.StandardFonts;
+      this.rgb = pdflib.rgb;
+    } catch (err) {
+      logger.error(`NanoPDFSkill: Missing dependencies (puppeteer-core or pdf-lib). Skill will be limited. Error: ${err.message}`);
+      return;
+    }
+
     // Launch puppeteer for HTML-to-PDF
-    this.browser = await puppeteer.launch({
-      headless: 'new',
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
+    try {
+      let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+      if (!executablePath) {
+        if (process.platform === 'win32') {
+          const paths = [
+            'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+            'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
+          ];
+          executablePath = paths.find(p => require('fs').existsSync(p));
+        } else {
+          executablePath = '/usr/bin/chromium';
+        }
+      }
+
+      if (executablePath) {
+        this.browser = await this.puppeteer.launch({
+          headless: 'new',
+          executablePath,
+          args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
+      }
+    } catch (err) {
+      logger.warn(`NanoPDFSkill: Failed to launch browser: ${err.message}`);
+    }
 
     // Load built-in templates
     await this.loadTemplates();
@@ -119,11 +152,11 @@ class NanoPDFSkill {
   }
 
   async mergePDFs({ files }, context) {
-    const mergedPdf = await PDFDocument.create();
+    const mergedPdf = await this.PDFDocument.create();
 
     for (const filePath of files) {
       const pdfBytes = await fs.readFile(filePath);
-      const pdf = await PDFDocument.load(pdfBytes);
+      const pdf = await this.PDFDocument.load(pdfBytes);
       const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
       copiedPages.forEach(page => mergedPdf.addPage(page));
     }
@@ -134,12 +167,12 @@ class NanoPDFSkill {
 
   async splitPDF({ file, pages }, context) {
     const pdfBytes = await fs.readFile(file);
-    const pdf = await PDFDocument.load(pdfBytes);
+    const pdf = await this.PDFDocument.load(pdfBytes);
     
     const results = [];
     
     for (const [index, pageRange] of pages.entries()) {
-      const newPdf = await PDFDocument.create();
+      const newPdf = await this.PDFDocument.create();
       const pageIndices = this.parsePageRange(pageRange, pdf.getPageCount());
       
       const copiedPages = await newPdf.copyPages(pdf, pageIndices);
@@ -176,7 +209,7 @@ class NanoPDFSkill {
 
   async extractFromPDF({ file, type = 'text' }, context) {
     const pdfBytes = await fs.readFile(file);
-    const pdf = await PDFDocument.load(pdfBytes);
+    const pdf = await this.PDFDocument.load(pdfBytes);
 
     switch (type) {
       case 'text':
@@ -235,7 +268,7 @@ class NanoPDFSkill {
 
   async fillForm({ file, fields }, context) {
     const pdfBytes = await fs.readFile(file);
-    const pdf = await PDFDocument.load(pdfBytes);
+    const pdf = await this.PDFDocument.load(pdfBytes);
     
     const form = pdf.getForm();
     
@@ -269,7 +302,7 @@ class NanoPDFSkill {
 
   async signPDF({ file, signature, position }, context) {
     const pdfBytes = await fs.readFile(file);
-    const pdf = await PDFDocument.load(pdfBytes);
+    const pdf = await this.PDFDocument.load(pdfBytes);
     
     // Load signature image
     let sigImage;
@@ -301,7 +334,7 @@ class NanoPDFSkill {
 
   async compressPDF({ file, quality = 'medium' }, context) {
     const pdfBytes = await fs.readFile(file);
-    const pdf = await PDFDocument.load(pdfBytes);
+    const pdf = await this.PDFDocument.load(pdfBytes);
     
     // Compression settings based on quality
     const settings = {
@@ -328,11 +361,11 @@ class NanoPDFSkill {
   }
 
   async addWatermark(pdfBuffer, text) {
-    const pdf = await PDFDocument.load(pdfBuffer);
+    const pdf = await this.PDFDocument.load(pdfBuffer);
     const pages = pdf.getPages();
     const { width, height } = pages[0].getSize();
     
-    const font = await pdf.embedFont(StandardFonts.Helvetica);
+    const font = await pdf.embedFont(this.StandardFonts.Helvetica);
     const fontSize = 50;
     const textWidth = font.widthOfTextAtSize(text, fontSize);
     
@@ -342,7 +375,7 @@ class NanoPDFSkill {
         y: height / 2,
         size: fontSize,
         font,
-        color: rgb(0.5, 0.5, 0.5),
+        color: this.rgb(0.5, 0.5, 0.5),
         opacity: 0.3,
         rotate: { angle: 45 * (Math.PI / 180), type: 'degrees' }
       });
@@ -360,9 +393,11 @@ class NanoPDFSkill {
     await fs.writeFile(filepath, buffer);
     
     // Auto-cleanup after 24 hours
-    setTimeout(() => {
+    const timeout = setTimeout(() => {
       fs.unlink(filepath).catch(() => {});
+      this._cleanups.delete(timeout);
     }, 86400000);
+    this._cleanups.add(timeout);
 
     return {
       success: true,
@@ -375,7 +410,7 @@ class NanoPDFSkill {
 
   async getPageCount(buffer) {
     try {
-      const pdf = await PDFDocument.load(buffer);
+      const pdf = await this.PDFDocument.load(buffer);
       return pdf.getPageCount();
     } catch {
       return undefined;
@@ -393,6 +428,10 @@ class NanoPDFSkill {
   }
 
   async destroy() {
+    for (const timeout of this._cleanups) {
+      clearTimeout(timeout);
+    }
+    this._cleanups.clear();
     if (this.browser) {
       await this.browser.close();
     }

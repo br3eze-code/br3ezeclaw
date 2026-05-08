@@ -1,26 +1,185 @@
 name: mikrotik
-version: 1.0.0
-description: MikroTik RouterOS management
+version: 2026.7.0
+description: MikroTik RouterOS v7 management — users, firewall, system, network diagnostics
 author: br3eze
+domain: networking
+dispatch: manage_network
+
+# Permission tiers: read-only | workspace-write | danger-full-access
 tools:
-  - name: user.kick
-    description: Disconnect a hotspot user
+  # ── read-only ──────────────────────────────────────────────────────
+  - name: system.stats
+    description: CPU, RAM, uptime, interface stats
+    permission: read-only
+    parameters: []
+    returns: object
+
+  - name: users.active
+    description: List currently connected hotspot users
+    permission: read-only
+    parameters: []
+    returns: array
+
+  - name: users.all
+    description: List all provisioned hotspot users
+    permission: read-only
+    parameters: []
+    returns: array
+
+  - name: dhcp.leases
+    description: Show DHCP leases
+    permission: read-only
+    parameters: []
+    returns: array
+
+  - name: arp.table
+    description: Show ARP table
+    permission: read-only
+    parameters: []
+    returns: array
+
+  - name: interfaces
+    description: List interfaces and link state
+    permission: read-only
+    parameters: []
+    returns: array
+
+  - name: wireless.clients
+    description: List wireless associations
+    permission: read-only
+    parameters: []
+    returns: array
+
+  - name: ip.routes
+    description: Show routing table
+    permission: read-only
+    parameters: []
+    returns: array
+
+  # ── workspace-write (default) ───────────────────────────────────────
+  - name: user.add
+    description: Create hotspot user (profile, password, limit)
+    permission: workspace-write
     parameters:
-      - name: user
+      - name: username
+        type: string
+        required: true
+      - name: password
+        type: string
+        required: true
+      - name: profile
+        type: string
+        required: false
+        default: default
+    returns: boolean
+
+  - name: user.remove
+    description: Delete a hotspot user
+    permission: workspace-write
+    parameters:
+      - name: username
         type: string
         required: true
     returns: boolean
-  - name: system.reboot
-    description: Reboot the router
+
+  - name: user.kick
+    description: Disconnect an active hotspot session
+    permission: workspace-write
+    parameters:
+      - name: username
+        type: string
+        required: true
+    returns: boolean
+
+  - name: firewall.block
+    description: Add drop rule for IP or MAC address
+    permission: workspace-write
+    parameters:
+      - name: target
+        type: string
+        description: IP address or MAC address
+        required: true
+    returns: boolean
+
+  - name: firewall.unblock
+    description: Remove drop rule for IP or MAC address
+    permission: workspace-write
+    parameters:
+      - name: target
+        type: string
+        required: true
+    returns: boolean
+
+  - name: ping
+    description: Ping test from router to host
+    permission: workspace-write
+    parameters:
+      - name: host
+        type: string
+        required: true
+      - name: count
+        type: integer
+        required: false
+        default: 4
+    returns: object
+
+  - name: traceroute
+    description: Traceroute from router to host
+    permission: workspace-write
+    parameters:
+      - name: host
+        type: string
+        required: true
+    returns: array
+
+  - name: dns.flush
+    description: Flush the RouterOS DNS cache
+    permission: workspace-write
     parameters: []
     returns: boolean
+
+  # ── danger-full-access ─────────────────────────────────────────────
+  - name: system.reboot
+    description: Reboot the router (requires explicit confirmation)
+    permission: danger-full-access
+    parameters:
+      - name: confirm
+        type: boolean
+        required: true
+    returns: boolean
+
+  - name: system.backup
+    description: Create a RouterOS configuration backup
+    permission: danger-full-access
+    parameters: []
+    returns: object
+
+  - name: wireless.set_frequency
+    description: Change wireless channel/frequency
+    permission: danger-full-access
+    parameters:
+      - name: interface
+        type: string
+        required: true
+      - name: frequency
+        type: string
+        required: true
+    returns: boolean
+
 config:
   - name: router.host
     type: string
     default: 192.168.88.1
+    env: MIKROTIK_IP
+  - name: router.port
+    type: integer
+    default: 8728
+    env: MIKROTIK_PORT
   - name: router.username
     type: string
-    required: true
+    default: admin
+    env: MIKROTIK_USER
   - name: router.password
     type: string
     secret: true
+    env: MIKROTIK_PASS
