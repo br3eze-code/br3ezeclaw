@@ -6,7 +6,7 @@ add name=notify-connection source={
     :local ip $"address";
     :local sessionId $"session-id";
     
-    /tool fetch url="https://auth.yourdomain.com/api/mikrotik/webhook/connect" \
+    /tool fetch url="{{AGENTOS_NODE_URL}}/api/mikrotik/webhook/connect" \
         http-method=post \
         http-data="username=$user&mac=$mac&ip=$ip&sessionId=$sessionId" \
         keep-result=no;
@@ -20,7 +20,7 @@ add name=notify-disconnection source={
     :local bytesOut $"bytes-out";
     :local uptime $"uptime";
     
-    /tool fetch url="https://auth.yourdomain.com/api/mikrotik/webhook/disconnect" \
+    /tool fetch url="{{AGENTOS_NODE_URL}}/api/mikrotik/webhook/disconnect" \
         http-method=post \
         http-data="username=$user&bytesIn=$bytesIn&bytesOut=$bytesOut&uptime=$uptime" \
         keep-result=no;

@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-REPO_URL="https://github.com/br3eze-code/br3ezeclaw.git"
+REPO_URL="https://github.com/br3eze-code/br3eze-code.git"
 INSTALL_DIR="/opt/agentos"
 SERVICE_USER="agentos"
 NODE_MAJOR=22
@@ -17,6 +17,13 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 # ── Root check ────────────────────────────────────────────────
 [ "$EUID" -eq 0 ] || error "Run as root: sudo bash install.sh"
+
+# ── Dependencies ───────────────────────────────────────────────
+install_dependencies() {
+    info "Checking system dependencies (curl, git, python3, tmux)..."
+    apt-get update -yqq
+    apt-get install -yqq curl git python3 tmux build-essential
+}
 
 # ── Node.js 22 ───────────────────────────────────────────────
 install_node() {
@@ -64,7 +71,13 @@ install_code() {
 # ── Environment ───────────────────────────────────────────────
 setup_env() {
     if [ ! -f "$INSTALL_DIR/.env" ]; then
-        cp "$INSTALL_DIR/.env.example" "$INSTALL_DIR/.env"
+        if [ -f "$INSTALL_DIR/.env.example" ]; then
+            cp "$INSTALL_DIR/.env.example" "$INSTALL_DIR/.env"
+        else
+            touch "$INSTALL_DIR/.env"
+            echo "NODE_ENV=production" >> "$INSTALL_DIR/.env"
+            echo "PORT=3000" >> "$INSTALL_DIR/.env"
+        fi
         chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/.env"
         chmod 600 "$INSTALL_DIR/.env"
         warn "Created $INSTALL_DIR/.env — edit it before starting the service:"
@@ -94,12 +107,20 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=agentos
 Environment=NODE_ENV=production
-EnvironmentFile=$INSTALL_DIR/.env
+EnvironmentFile=-$INSTALL_DIR/.env
 
 # Hardening
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
 ReadWritePaths=$INSTALL_DIR/logs $INSTALL_DIR/data
 
 [Install]
@@ -127,6 +148,15 @@ open_ports() {
     fi
 }
 
+# ── Validation ────────────────────────────────────────────────
+validate_service() {
+    info "Validating service configuration..."
+    if ! systemctl cat agentos >/dev/null 2>&1; then
+        error "Systemd service is not properly configured."
+    fi
+    info "Service validation passed."
+}
+
 # ── Main ──────────────────────────────────────────────────────
 main() {
     echo ""
@@ -134,12 +164,14 @@ main() {
     echo "  ─────────────────────────────────────"
     echo ""
 
+    install_dependencies
     install_node
     create_user
     install_code
     setup_env
     install_service
     open_ports
+    validate_service
 
     HOST_IP=$(hostname -I | awk '{print $1}')
 

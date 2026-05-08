@@ -8,16 +8,16 @@
 # ============================================================
 
 # ================== CONFIGURATION ==================
-:local botToken "YOUR_BOT_TOKEN_HERE"
-:local allowedUserID "YOUR_CHAT_ID_HERE"
+:local botToken "{{TELEGRAM_TOKEN}}"
+:local allowedUserID "{{TELEGRAM_CHAT_ID}}"
 :local deviceName [/system identity get name]
 :local enableLogging true
 :local logPath "agentos-sentinel.log"
 :local maxCommandRate 15
 :local rateWindow 60
 :local powerConnectEnabled false
-:local powerConnectAPI "https://api.powerconnect.example/v1"
-:local powerConnectKey ""
+:local powerConnectAPI "{{AGENTOS_NODE_URL}}/v1"
+:local powerConnectKey "{{AGENTOS_API_PASSWORD}}"
 
 # ================== INTERNAL STATE ==================
 :local lastUpdateID 0

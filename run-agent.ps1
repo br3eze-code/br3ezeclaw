@@ -14,7 +14,7 @@ do {
 
     # 2. Start the Node.js Application
     # Replace 'server.js' with the actual filename of your script
-    node server.js
+    node bin/agentos-cli.js -t
 
     # 3. Handle Crashes/Exits
     Write-Host "`n[ALERT] AgentOS stopped or crashed." -ForegroundColor Red

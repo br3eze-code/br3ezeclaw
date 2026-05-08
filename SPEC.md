@@ -25,7 +25,7 @@
 
 ## 1. Executive Summary
 
-AgentOS is a Node.js network intelligence platform purpose-built for community WiFi operators in Africa. It combines MikroTik RouterOS management, multi-LLM AI reasoning, multilingual messaging (Telegram + WhatsApp), real-time WebSocket control, voucher billing, and Mastercard A2A payment processing into a single deployable unit.
+AgentOS is a Node.js network intelligence platform purpose-built for community WiFi operators in Africa. It combines MikroTik RouterOS management, multi-LLM AI reasoning, multilingual messaging (Telegram + WhatsApp), real-time WebSocket control, voucher billing, recurring subscriptions, enhanced P2P credit transfers, and Mastercard A2A payment processing into a single deployable unit.
 
 The platform targets operators running group Starlink subscriptions across shared community networks — a growing segment in sub-Saharan Africa where last-mile connectivity is expensive and management tooling is scarce.
 
@@ -35,7 +35,8 @@ The platform targets operators running group Starlink subscriptions across share
 - MikroTik hotspot lifecycle management (user provisioning, session control, firewall, DNS)
 - Unified Telegram + WhatsApp bot with multilingual intent routing (EN / ES / FR / SW)
 - Per-user EmotionEngine for context-aware AI tone
-- Voucher system with QR codes, wallet management, and Mastercard A2A payment initiation
+- Voucher system with QR codes, wallet management, recurring subscriptions, and Mastercard A2A payment initiation
+- Enhanced P2P credit system with alias resolution (phone/email/username) and fee support
 - WebSocket CLI for browser-based terminal access
 - CPM (Critical Path Method) + EVM (Earned Value Management) project tracking engine
 - Self-audit anomaly detection on the event log
@@ -197,22 +198,26 @@ All scheduled jobs use `_cronFire(jobKey, hour, minute, fn)` — a drift-safe he
 | Plan | Duration | Data Limit | Price (USD) |
 |------|----------|------------|-------------|
 | 1hour | 1 hour | Router profile | $1.00 |
-| 1Day | 24 hours | Router profile | $5.00 |
-| 7Day | 7 days | Router profile | $25.00 |
-| 30Day | 30 days | Router profile | $80.00 |
+| 1Day | 24 hours | Router profile | $2.00 |
+| 7Day | 7 days | Router profile | $3.00 |
+| 30Day | 30 days | Router profile | $6.00 |
 
 **Lifecycle:**
 
 ```
 createVoucher() → provisioned on MikroTik → QR code generated →
 customer scans / uses code → redeemVoucher() → session expires →
-expireOldVouchers() marks used
+Auto-Renewal Engine (reconciles wallet balance) → renews or kicks
+expireOldVouchers() marks used if no renewal possible
 ```
 
-**Code format:** `STAR-[A-F0-9]{6}` (e.g., `STAR-4A2F8C`)  
+**Code format:** `STAR-[A-F0-9]{4}` (e.g., `STAR-4A2F-XXXX`)  
 **Generation:** `crypto.randomBytes(3).toString('hex').toUpperCase()`
 
 **Dual expiry model:** Sessions expire at whichever comes first — the `expiresAt` timestamp or the MikroTik profile's `limit-bytes-total`.
+
+**Recurring Billing Engine:**
+As of v2026.7.1, the platform supports automatic plan renewal. The `guardHotspot` reaper monitors session expiry; if a user has an active wallet with sufficient balance, the system automatically deducts credits and extends the MikroTik session without service interruption.
 
 ### 4.2 Tool Registry
 
@@ -284,6 +289,18 @@ Scheduled every 6 hours via `AgentOSOrchestrator._scheduleSelfAudit()`. Violatio
 | TCPI | (BAC − EV) / (BAC − AC) |
 
 **EVM data sources:** voucher revenue as EV/PV, LLM token spend + infra cost as AC.
+
+### 4.7 Financial Engine & P2P Credits
+
+**Enhanced P2P Transfers:**
+Users can transfer credits using identifiers beyond UIDs.
+
+- **Resolvers:** Phone number (E.164), Email, or Username resolution.
+- **Fee Logic:** Configurable `P2P_FEE_PERCENT` and `P2P_FEE_FLAT` environment variables.
+- **Dual-Entry:** Separate `p2p_transfer_sent` and `p2p_transfer_received` records for accurate accounting.
+
+**Mastercard A2A Support:**
+Full integration with the Account-to-Account Commerce API for direct bank-to-wallet top-ups and voucher purchases. Supports direct initiation and webhook-based status reconciliation.
 
 ### 4.6 Messaging Flows
 
@@ -449,8 +466,8 @@ Runs on a 6-hour schedule and on-demand. Detects sensitive action bursts and ins
 
 ```json
 {
-  "id":         "STAR-4A2F8C",
-  "code":       "STAR-4A2F8C",
+  "id":         "9HzaiqL4D83f6",
+  "code":       "STAR-4A2F-K6LQ",
   "plan":       "1Day",
   "createdAt":  "2026-04-09T10:00:00.000Z",
   "expiresAt":  "2026-04-10T10:00:00.000Z",
@@ -557,10 +574,10 @@ DEFAULT_LANGUAGE=en                # en|es|fr|sw
 
 ```bash
 # Daemon (full platform)
-node index.js
+node main.js
 
 # Interactive CLI REPL
-node index.js cli
+node main.js cli
 
 # One-shot CLI query
 node index.js cli "how many active users?"
@@ -611,6 +628,7 @@ The entire platform runs on a single Node.js process with no microservice depend
 
 - WhatsApp Baileys uses unofficial reverse-engineered protocol. Meta may break it without notice. Mitigation: official WhatsApp Business API as upgrade path.
 - MikroTik API (port 8728) must be accessible from the host. Firewall or NAT may block it in some deployments.
+- Thermal printing discovery (v2026.7.1) optimized via `Get-CimInstance` and 5-minute result caching, reducing hardware enumeration latency from >15s to <200ms on Windows hosts.
 - `selfAudit()` operates on in-memory rolling buffer (last 1,000 events). Long-lived Firebase deployments with high event volumes will have gaps in audit history before the in-memory buffer was introduced (fixed in v2026.7.0).
 
 ### 9.2 Operational Feasibility
@@ -764,6 +782,9 @@ The CPM+EVM engine allows operators to track voucher sales against planned targe
 | BUG-004 | `Database.logAuditTrail()` | `_audit` buffer not populated in Firebase mode → selfAudit permanently blind |
 | BUG-005 | `AgentOSBot._getEmotion()` | `_emotions` Map grew unbounded — capped at 10,000 |
 | BUG-006 | `EmotionEngine._clamp()` | Generic loop applied wrong floor to `urgency`/`energy` |
+| FIX-015 | `printer.js` | Fixed socket timeout by prioritizing dynamic discovery; added virtual port filtering |
+| FIX-016 | `universal-billing.js` | Implemented Auto-Renewal logic for wallet-funded recurring plans |
+| FEAT-01 | `database.js` | Enhanced P2P system with Phone/Email resolution and fee support |
 
 ---
 

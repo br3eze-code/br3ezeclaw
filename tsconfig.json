@@ -1,42 +1,46 @@
 {
   "compilerOptions": {
     // ── Output ─────────────────────────────────────────────
-    "outDir":    "./dist",
-    "rootDir":   "./src",
-
+    "outDir": "./dist",
+    "rootDir": "./src",
     // ── Target ─────────────────────────────────────────────
     // Node 22 supports all ES2022 features natively.
-    "target":    "ES2022",
-    "lib":       ["ES2022"],
-
+    "target": "ES2022",
+    "lib": [
+      "ES2022"
+    ],
     // ── Module system ───────────────────────────────────────
-   
-    "module":           "CommonJS",
+    "module": "CommonJS",
     "moduleResolution": "Node",
-    "esModuleInterop":  true,
-
+    "esModuleInterop": true,
     // ── Strictness ──────────────────────────────────────────
-    "strict":                           true,
-    "noUnusedLocals":                   true,
-    "noUnusedParameters":               true,
-    "noImplicitReturns":                true,
-    "noFallthroughCasesInSwitch":       true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
-
     // ── Extras ──────────────────────────────────────────────
-    "resolveJsonModule":  true,
-    "skipLibCheck":       true,
-    "declaration":        true,
-    "declarationMap":     true,
-    "sourceMap":          true,
-
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
     // ── Path aliases ──
     "baseUrl": ".",
     "paths": {
-      "@core/*":    ["src/core/*"],
-      "@utils/*":   ["src/utils/*"],
-      "@agents/*":  ["agents/*"],
-      "@adapters/*":["adapters/*"]
+      "@core/*": [
+        "src/core/*"
+      ],
+      "@utils/*": [
+        "src/utils/*"
+      ],
+      "@agents/*": [
+        "agents/*"
+      ],
+      "@adapters/*": [
+        "adapters/*"
+      ]
     }
   },
   "include": [

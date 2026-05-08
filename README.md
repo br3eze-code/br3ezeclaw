@@ -11,7 +11,7 @@
 </div>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AgentOS-2026.5.2-blue?style=for-the-badge&logo=router&logoColor=white" alt="Version">
+  <img src="https://img.shields.io/badge/AgentOS-2026.5.4-blue?style=for-the-badge&logo=router&logoColor=white" alt="Version">
   <img src="https://img.shields.io/badge/MikroTik-RouterOS-green?style=for-the-badge&logo=mikrotik" alt="MikroTik">
   <img src="https://img.shields.io/badge/AI-Gemini%202.5-orange?style=for-the-badge&logo=google" alt="AI">
 </p>
@@ -134,7 +134,7 @@ TELEGRAM_ADMIN_CHAT_ID=your_chat_id
 
 # AI
 GEMINI_API_KEY=your_gemini_key
-ANTROPIC_API_KEY=
+ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
 
 # Payments (Mastercard A2A)
