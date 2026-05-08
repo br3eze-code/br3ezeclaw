@@ -65,6 +65,7 @@ Right-click → Kick   ──┘
 | WebSocket CLI | ✅ Production | Browser terminal experience |
 | REST API | ✅ Production | Programmatic/webhook access |
 | RouterOS Native | ✅ Production | On-device Sentinel agent (`.rsc`) |
+| Cordova App | ✅ Production | Mobile App (`ios , android`)|
 
 </td>
 <td width="50%">
