@@ -1,0 +1,81 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:00"
+      timezone: Africa/Harare
+    open-pull-requests-limit: 8
+    labels: [dependencies, automated]
+    groups:
+      firebase:
+        patterns: ["firebase*", "@firebase/*"]
+      ai-sdk:
+        patterns: ["@google/generative-ai", "@anthropic-ai/*", "openai"]
+      mikrotik:
+        patterns: ["routeros-client"]
+      express:
+        patterns: ["express*", "helmet", "cors", "compression", "morgan", "express-rate-limit", "express-validator"]
+      google-cloud:
+        patterns: ["google-github-actions/*", "@google-cloud/*"]
+      octokit:
+        patterns: ["@octokit/*"]
+      auth:
+        patterns: ["passport*", "jsonwebtoken", "bcryptjs", "speakeasy"]
+      messaging:
+        patterns: ["node-telegram-bot-api", "@whiskeysockets/baileys", "twilio", "nodemailer"]
+      testing:
+        patterns: ["jest", "@types/jest", "supertest", "ts-jest", "@testing-library/*"]
+      cordova:
+        patterns: ["cordova*"]
+    ignore:
+      # Pin major CLI/UX packages — breaking UX changes need manual review
+      - dependency-name: "chalk"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "ora"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "inquirer"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "boxen"
+        update-types: ["version-update:semver-major"]
+      # xterm — breaking API changes in major versions
+      - dependency-name: "xterm"
+        update-types: ["version-update:semver-major"]
+      # ESLint 8 pinned deliberately (config is 8.56.0)
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+
+  # vscode-extension has its own package.json
+  - package-ecosystem: npm
+    directory: /vscode-extension
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:30"
+      timezone: Africa/Harare
+    labels: [dependencies, automated, vscode]
+    open-pull-requests-limit: 3
+
+  # Cordova plugin
+  - package-ecosystem: npm
+    directory: /custom-plugins/cordova-plugin-aicore
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:30"
+      timezone: Africa/Harare
+    labels: [dependencies, automated, cordova]
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:00"
+      timezone: Africa/Harare
+    labels: [dependencies, github-actions, automated]
+    open-pull-requests-limit: 3
