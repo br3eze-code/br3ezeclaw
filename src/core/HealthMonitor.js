@@ -71,9 +71,20 @@ class HealthMonitor extends EventEmitter {
 
     const unhealthy = checkResults.filter(r => r.status !== 'healthy');
     
+    // Add MikroTik health if available
+    let router = null;
+    if (this.agent?.mikrotik) {
+        const mt = this.agent.mikrotik;
+        router = {
+            isConnected: mt.state?.isConnected || false,
+            health: mt.state?.lastKnownHealth || null
+        };
+    }
+    
     return {
       status: unhealthy.length === 0 ? 'healthy' : 'degraded',
       system,
+      router,
       checks: checkResults,
       metrics: {
         totalInteractions: this.metrics.interactions,

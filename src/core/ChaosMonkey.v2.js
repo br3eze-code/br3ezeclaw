@@ -420,6 +420,10 @@ class ChaosMonkey extends EventEmitter {
       [CHAOS_DOMAINS.COMMERCE]: {
         corruptIndexedDB: SEVERITY.MEDIUM,
         latencies: SEVERITY.LOW
+      },
+      [CHAOS_DOMAINS.SYSTEM]: {
+        cpuSpike: SEVERITY.HIGH,
+        memoryLeak: SEVERITY.HIGH
       }
     };
     return matrix[domain]?.[type] || SEVERITY.MEDIUM;
@@ -492,6 +496,8 @@ class ChaosMonkey extends EventEmitter {
           return await this._verifyNetworkRecovery(record);
         case CHAOS_DOMAINS.COMMERCE:
           return await this._verifyCommerceRecovery(record);
+        case CHAOS_DOMAINS.SYSTEM:
+          return await this._verifySystemRecovery(record);
         default:
           return false;
       }
@@ -564,6 +570,22 @@ class ChaosMonkey extends EventEmitter {
         return (Date.now() - start) < 1000;
       }
       
+      default:
+        return false;
+    }
+  }
+
+  async _verifySystemRecovery(record) {
+    switch(record.type) {
+      case 'cpuSpike': {
+        const start = Date.now();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const elapsed = Date.now() - start;
+        return elapsed < 150;
+      }
+      case 'memoryLeak': {
+        return !record.originalState.leakArray;
+      }
       default:
         return false;
     }
@@ -837,6 +859,93 @@ class ChaosMonkey extends EventEmitter {
       domain: CHAOS_DOMAINS.COMMERCE,
       type: 'latencies',
       delay_ms: options.delayMs || 5000,
+      recovery_window_ms: this.config.recoveryWindow,
+      status: 'active'
+    };
+  }
+
+  // ==================== SYSTEM DISRUPTIONS ====================
+
+  async cpuSpike(options = {}) {
+    const chaosId = this._generateChaosId(CHAOS_DOMAINS.SYSTEM, 'cpuSpike');
+    
+    if (this.config.dryRun) {
+      return { chaos_id: chaosId, status: 'dry_run' };
+    }
+
+    await this.initialize();
+    this._log('info', 'Injecting: cpuSpike', { chaos_id: chaosId });
+
+    const durationMs = options.durationMs || 5000;
+    const intervalMs = options.intervalMs || 100;
+
+    const intervalRef = setInterval(() => {
+        const start = Date.now();
+        while(Date.now() - start < intervalMs) {
+            // spin wait to block event loop
+        }
+    }, intervalMs * 2);
+
+    const record = this._recordChaos(
+      chaosId,
+      CHAOS_DOMAINS.SYSTEM,
+      'cpuSpike',
+      { intervalRef, timestamp: Date.now() },
+      async () => {
+        clearInterval(intervalRef);
+      }
+    );
+
+    setTimeout(() => {
+        clearInterval(intervalRef);
+    }, durationMs * 2);
+
+    return {
+      chaos_id: chaosId,
+      domain: CHAOS_DOMAINS.SYSTEM,
+      type: 'cpuSpike',
+      duration_ms: durationMs,
+      recovery_window_ms: this.config.recoveryWindow,
+      status: 'active'
+    };
+  }
+
+  async memoryLeak(options = {}) {
+    const chaosId = this._generateChaosId(CHAOS_DOMAINS.SYSTEM, 'memoryLeak');
+    
+    if (this.config.dryRun) {
+      return { chaos_id: chaosId, status: 'dry_run' };
+    }
+
+    await this.initialize();
+    this._log('info', 'Injecting: memoryLeak', { chaos_id: chaosId });
+
+    const leakSizeMB = options.leakSizeMB || 100;
+    const leakArray = [];
+    
+    const stringSize = 1024 * 1024;
+    for(let i = 0; i < leakSizeMB; i++) {
+        leakArray.push(Buffer.alloc(stringSize, 'X'));
+    }
+
+    const record = this._recordChaos(
+      chaosId,
+      CHAOS_DOMAINS.SYSTEM,
+      'memoryLeak',
+      { leakArray, timestamp: Date.now() },
+      async () => {
+        const rec = this.activeChaos.get(chaosId);
+        if (rec && rec.originalState) {
+            rec.originalState.leakArray = null;
+        }
+      }
+    );
+
+    return {
+      chaos_id: chaosId,
+      domain: CHAOS_DOMAINS.SYSTEM,
+      type: 'memoryLeak',
+      leak_size_mb: leakSizeMB,
       recovery_window_ms: this.config.recoveryWindow,
       status: 'active'
     };

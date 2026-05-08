@@ -1,7 +1,7 @@
 'use strict';
 
 const WebSocket              = require('ws');
-const { Queue }              = require('bull');
+
 const crypto                 = require('crypto');
 const { logger }             = require('./logger');
 const { getConfig }          = require('./config');

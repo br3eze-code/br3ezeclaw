@@ -80,7 +80,7 @@ class RuntimeSession {
 // ── AgentRuntime ──────────────────────────────────────────────────────────────
 
 class AgentRuntime extends EventEmitter {
-    constructor(config) {
+    constructor(config = {}) {
         super();
         this.defaultConfig = {
             permissionMode:   config.permissionMode   || PermissionMode.PROMPT,

@@ -42,9 +42,9 @@ if (!fs.existsSync(logDir)) {
 }
 
 // Start gateway
-const { startGateway } = require('./gateway');
+const { startGateway } = require('./gateway-engine');
 
-startGateway({ port })
+startGateway({ port, gateway: { port } })
   .then(() => {
     console.log(`Gateway daemon started on port ${port}`);
   })

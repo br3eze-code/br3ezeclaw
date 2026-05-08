@@ -1,8 +1,16 @@
 const readline = require('readline');
-const logger = require('../logger');
+const { logger } = require('../logger');
 const { BaseChannel } = require('./BaseChannel');
 
 class CLIChannel extends BaseChannel {
+    static getMetadata() {
+        return {
+            name: 'CLI',
+            description: 'Messaging channel',
+            configFields: []
+        };
+    }
+
   constructor(config, agent) {
     super(config, agent);
     this.rl = null;
@@ -70,5 +78,7 @@ class CLIChannel extends BaseChannel {
     await super.destroy();
   }
 }
+
+BaseChannel.register('cli', CLIChannel);
 
 module.exports = CLIChannel;

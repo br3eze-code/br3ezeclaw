@@ -1,15 +1,52 @@
+// src/core/loadDomain.js
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { logger } = require('./logger');
 const registry = require('./ToolRegistry');
-const mikrotikDomain = require('../domains/mikrotik');
 
-async function loadDomains(config) {
-  // Load MikroTik
-  registry.registerDomain('mikrotik', mikrotikDomain.getSkills(config));
+/**
+ * Automatically loads all domains from src/domains
+ */
+function loadAllDomains(config = {}) {
+  const domainsDir = path.join(__dirname, '../domains');
+  
+  if (!fs.existsSync(domainsDir)) {
+    logger.warn('Domains directory not found');
+    return;
+  }
 
-  // Easy to add more:
-  // const linuxDomain = require('../domains/linux');
-  // registry.registerDomain('linux', linuxDomain.getSkills(config));
+  const items = fs.readdirSync(domainsDir);
 
-  console.log(`Loaded domains: ${Array.from(registry.domains.keys()).join(', ')}`);
+  for (const item of items) {
+    const itemPath = path.join(domainsDir, item);
+    const stat = fs.statSync(itemPath);
+
+    if (stat.isDirectory()) {
+      const indexPath = path.join(itemPath, 'index.js');
+      if (fs.existsSync(indexPath)) {
+        try {
+          const domainModule = require(indexPath);
+          
+          if (typeof domainModule.register === 'function') {
+            // Functional registration pattern
+            domainModule.register(registry, config[item] || {});
+          } else if (typeof domainModule === 'function' && domainModule.prototype instanceof require('../domains/BaseDomain')) {
+            // Class registration pattern
+            const DomainClass = domainModule;
+            const domainInstance = new DomainClass(config[item] || {});
+            registry.registerDomain(domainInstance.name || item, domainInstance.getSkills());
+          } else {
+            logger.warn(`Domain ${item} does not follow a recognized registration pattern`);
+          }
+        } catch (err) {
+          logger.error(`Failed to load domain ${item}: ${err.message}`);
+          console.error(err); // Show stack trace for debugging
+        }
+      }
+    }
+  }
 }
 
-module.exports = loadDomains;
+module.exports = loadAllDomains;
