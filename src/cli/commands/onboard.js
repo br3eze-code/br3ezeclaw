@@ -523,6 +523,74 @@ module.exports = (program) => {
         discordConfig = { enabled: true, token };
       }
 
+      // ── Step 3.8: SMS ────────────────────────────────────────────────────
+      note(chalk.gray('Optional: send/receive messages via SMS.'), chalk.greenBright.bold('📱 Step 3.8 — SMS'));
+      const { wantsSMS } = await prompt({
+        type: 'confirm',
+        name: 'wantsSMS',
+        message: 'Configure SMS channel?',
+        default: existingConfig.sms?.enabled || false
+      });
+      let smsConfig = { enabled: false };
+      if (wantsSMS) {
+        const smsAnswers = await prompt([
+          { type: 'list', name: 'provider', message: 'SMS Provider:', choices: ['twilio', 'econet'], default: existingConfig.sms?.provider || 'twilio' }
+        ]);
+        if (smsAnswers.provider === 'twilio') {
+          const tAnswers = await prompt([
+            { type: 'input', name: 'accountSid', message: 'Twilio Account SID:', default: existingConfig.sms?.accountSid },
+            { type: 'password', name: 'authToken', message: 'Twilio Auth Token:', default: existingConfig.sms?.authToken },
+            { type: 'input', name: 'fromNumber', message: 'Twilio From Number:', default: existingConfig.sms?.fromNumber }
+          ]);
+          smsConfig = { enabled: true, provider: 'twilio', ...tAnswers };
+        } else if (smsAnswers.provider === 'econet') {
+          const eAnswers = await prompt([
+            { type: 'input', name: 'clientId', message: 'Econet Client ID:', default: existingConfig.sms?.clientId },
+            { type: 'password', name: 'clientSecret', message: 'Econet Client Secret:', default: existingConfig.sms?.clientSecret },
+            { type: 'input', name: 'fromName', message: 'Econet From Name:', default: existingConfig.sms?.fromName || 'AgentOS' }
+          ]);
+          smsConfig = { enabled: true, provider: 'econet', ...eAnswers };
+        }
+      }
+
+      // ── Step 3.9: USSD ───────────────────────────────────────────────────
+      note(chalk.gray('Optional: manage services via USSD.'), chalk.yellowBright.bold('📶 Step 3.9 — USSD'));
+      const { wantsUSSD } = await prompt({
+        type: 'confirm',
+        name: 'wantsUSSD',
+        message: 'Configure USSD channel?',
+        default: existingConfig.ussd?.enabled || false
+      });
+      let ussdConfig = { enabled: false };
+      if (wantsUSSD) {
+        const ussdAnswers = await prompt([
+          { type: 'input', name: 'apiKey', message: 'Africa\'s Talking API Key:', default: existingConfig.ussd?.apiKey },
+          { type: 'input', name: 'username', message: 'Africa\'s Talking Username:', default: existingConfig.ussd?.username },
+          { type: 'input', name: 'serviceCode', message: 'USSD Service Code (e.g. *384*123#):', default: existingConfig.ussd?.serviceCode }
+        ]);
+        ussdConfig = { enabled: true, provider: 'africastalking', ...ussdAnswers };
+      }
+
+      // ── Step 3.10: Email ─────────────────────────────────────────────────
+      note(chalk.gray('Optional: receive alerts and interact via Email.'), chalk.whiteBright.bold('📧 Step 3.10 — Email'));
+      const { wantsEmail } = await prompt({
+        type: 'confirm',
+        name: 'wantsEmail',
+        message: 'Configure Email channel?',
+        default: existingConfig.email?.enabled || false
+      });
+      let emailConfig = { enabled: false };
+      if (wantsEmail) {
+        const emailAnswers = await prompt([
+          { type: 'input', name: 'host', message: 'SMTP Host (e.g. smtp.gmail.com):', default: existingConfig.email?.host },
+          { type: 'number', name: 'port', message: 'SMTP Port:', default: existingConfig.email?.port || 587 },
+          { type: 'input', name: 'user', message: 'SMTP User (Email):', default: existingConfig.email?.user },
+          { type: 'password', name: 'pass', message: 'SMTP Password/App Password:', default: existingConfig.email?.pass },
+          { type: 'input', name: 'from', message: 'From Address (e.g. AgentOS <bot@domain.com>):', default: existingConfig.email?.from }
+        ]);
+        emailConfig = { enabled: true, ...emailAnswers };
+      }
+
       // ── Step 4: AI Provider ───────────────────────────────────────────────
       note(chalk.gray('Pick the AI brain powering your agents.'), chalk.magentaBright.bold('🧠 Step 4 — AI Provider'));
       // Load all providers via LLMCoordinator to ensure they are registered
@@ -668,6 +736,9 @@ module.exports = (program) => {
         whatsapp: whatsappConfig,
         slack: slackConfig,
         discord: discordConfig,
+        sms: smsConfig,
+        ussd: ussdConfig,
+        email: emailConfig,
         ai: { provider: aiProvider, apiKey: aiKey, model: aiModel },
         gateway: { ...gatewayConfig, host: '127.0.0.1', token: existingConfig.gateway?.token || process.env.AGENTOS_GATEWAY_TOKEN || crypto.randomBytes(32).toString('hex') },
         firebase: firebaseConfig, payments: paymentConfig, plans,
@@ -677,6 +748,9 @@ module.exports = (program) => {
           whatsappBot: wantsWhatsApp,
           slackBot: wantsSlack,
           discordBot: wantsDiscord,
+          smsBot: wantsSMS,
+          ussdBot: wantsUSSD,
+          emailBot: wantsEmail,
           webDashboard: true,
           payments: paymentConfig.provider !== 'none'
         }
