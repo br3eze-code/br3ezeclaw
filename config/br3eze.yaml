@@ -61,6 +61,13 @@ channels:
     appId: ${GITHUB_APP_ID}
     privateKey: ${GITHUB_PRIVATE_KEY}
 
+integration:
+  printer:
+    type: EPSON
+    interface: auto
+    timeout: 5000
+    enabled: true
+
 integrations:
   firebase:
     projectId: ${FIREBASE_PROJECT}
