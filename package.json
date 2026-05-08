@@ -69,7 +69,7 @@
 		"@kubernetes/client-node": "^1.4.0",
 		"@octokit/auth-app": "^8.2.0",
 		"@octokit/rest": "^22.0.1",
-		"axios": "^1.13.2",
+		"axios": "^1.16.0",
 		"bcryptjs": "^2.4.3",
 		"better-sqlite3": "^12.8.0",
 		"boxen": "^7.1.1",
