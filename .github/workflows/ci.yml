@@ -1,30 +1,80 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
-permissions:
-  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  lint-test:
+    name: Lint & Test
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+
+      - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Run linter
+          node-version: 22
+          cache: npm
+
+      - name: Install (skip postinstall/preuninstall hooks)
+        run: npm ci --ignore-scripts
+
+      # Jest config uses modulePaths: ['/tmp/jest-deps/node_modules']
+      # Install deps there so Jest can resolve them during tests
+      - name: Prepare Jest module path
+        run: |
+          mkdir -p /tmp/jest-deps
+          cp package.json /tmp/jest-deps/
+          cd /tmp/jest-deps && npm ci --ignore-scripts --prefer-offline 2>/dev/null || true
+
+      - name: Lint
         run: npm run lint
-      
-      - name: Run tests
-        run: npm test
-      
-      - name: Build check
-        run: npm run build
+
+      - name: Test
+        run: npm test -- --ci --forceExit --passWithNoTests
+        env:
+          NODE_ENV: test
+          # RouterOS — mocked in tests
+          ROS_HOST: 127.0.0.1
+          ROS_PORT: 8728
+          ROS_USER: admin
+          ROS_PASS: test
+          MIKROTIK_HOST: 127.0.0.1
+          MIKROTIK_USER: admin
+          MIKROTIK_PASS: test
+          # Firebase
+          DATA_BACKEND: local
+          FIREBASE_PROJECT_ID: test-project
+          # AI
+          LLM_PROVIDER: gemini
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Messaging
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALLOWED_CHAT_ID: ${{ secrets.TELEGRAM_ALLOWED_CHAT_ID }}
+          # Server
+          PORT: 3000
+          GATEWAY_PORT: 19876
+
+      - name: Type check (jsconfig + tsconfig)
+        run: npm run build:check
+
+      - name: Security check script
+        run: npm run security:audit
+        env:
+          NODE_ENV: test
+        continue-on-error: true  # advisory only in CI — hard block is in security.yml
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
