@@ -1,0 +1,135 @@
+# endpoints.yaml - OpenAPI 2.0 for Cloud Endpoints + ESPv2
+swagger: '2.0'
+info:
+  title: Br3eze A2A Agent Gateway
+  description: A2A endpoint for Br3eze agents on Google Agent Platform
+  version: 1.1.0
+host: invoice-processor.endpoints.YOUR_PROJECT.cloud.goog
+schemes:
+    - https
+produces:
+    - application/json
+consumes:
+    - application/json
+
+# ESPv2 security - enforces SPIFFE mTLS
+securityDefinitions:
+  spiffe_mtls:
+    type: oauth2
+    flow: application
+    authorizationUrl: ''
+    tokenUrl: ''
+    x-google-issuer: spiffe://YOUR_PROJECT.svc.id.goog
+    x-google-jwks_uri: https://www.googleapis.com/service_accounts/v1/jwk/YOUR_PROJECT.svc.id.goog
+    x-google-audiences: spiffe://YOUR_PROJECT.svc.id.goog
+
+security:
+    - spiffe_mtls: []
+
+# A2A endpoint
+paths:
+  /a2a/{agentId}:
+    post:
+      summary: A2A Protocol Endpoint
+      operationId: a2aMessage
+      description: Handles A2A v1.0 messages from Gemini Enterprise agents
+      parameters:
+                - name: agentId
+          in: path
+          required: true
+          type: string
+          description: Br3eze agent ID
+                - name: body
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/A2AMessage'
+      responses:
+        '200':
+          description: A2A response
+          schema:
+            $ref: '#/definitions/A2AResponse'
+        '401':
+          description: Invalid SPIFFE SVID
+        '403':
+          description: Agent not in trust domain
+        '429':
+          description: Rate limited
+      x-google-backend:
+        address: https://br3eze-invoice-processor.br3eze.svc.cluster.local:8080
+        protocol: h2 # HTTP/2 for gRPC
+        deadline: 30.0
+        jwt_audience: spiffe://YOUR_PROJECT.svc.id.goog/ns/br3eze/sa/br3eze-invoice-agent
+
+  /a2a/health:
+    get:
+      summary: Health check for GKE + Cloud LB
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Healthy
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+              spiffe_id:
+                type: string
+      x-google-backend:
+        address: https://br3eze-invoice-processor.br3eze.svc.cluster.local:8080
+
+definitions:
+  A2AMessage:
+    type: object
+    required: [protocol, protocolVersion, type, sender, messageId, timestamp]
+    properties:
+      protocol:
+        type: string
+        enum: 
+      protocolVersion:
+        type: string
+        enum: ['1.0']
+      type:
+        type: string
+        enum: [TASK_REQUEST, TASK_STREAM_REQUEST, CAPABILITY_QUERY, HEALTH_CHECK]
+      sender:
+        type: string
+        description: SPIFFE ID of sender
+      recipient:
+        type: string
+      messageId:
+        type: string
+        format: uuid
+      traceId:
+        type: string
+      task:
+        type: object
+      _signature:
+        type: string
+        description: Base64 SPIFFE X.509 signature
+
+  A2AResponse:
+    type: object
+    properties:
+      type:
+        type: string
+        enum: [TASK_RESPONSE, ERROR, HEALTH_RESPONSE]
+      sender:
+        type: string
+      result:
+        type: object
+      error:
+        type: object
+        properties:
+          code:
+            type: string
+          message:
+            type: string
+
+# ESPv2 config - enforce SPIFFE
+x-google-endpoints:
+    - name: invoice-processor.endpoints.YOUR_PROJECT.cloud.goog
+    target: 34.120.5.123 # Your GCLB IP
+    allowCors: false
+x-google-allow:
+    - spiffe://YOUR_PROJECT.svc.id.goog/ns/* # Allow all agents in project
