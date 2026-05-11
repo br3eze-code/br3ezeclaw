@@ -118,7 +118,7 @@
 		"qrcode": "^1.5.4",
 		"qrcode-terminal": "^0.12.0",
 		"rate-limiter-flexible": "^5.0.0",
-		"routeros-client": "^1.1.1",
+		"routeros-client": "^1.1.2",
 		"serialport": "^13.0.0",
 		"speakeasy": "^2.0.0",
 		"ssh2": "^1.17.0",
